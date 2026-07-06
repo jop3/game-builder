@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "theme_id": "medieval_realistic",
+  "display_name": "Medieval Realistic",
+  "palette": {
+    "primary":   ["#6E6259", "#8A7F73"],
+    "secondary": ["#4A3A2C", "#6B4F3A"],
+    "accent":    ["#3B3B3B", "#C9A227"],
+    "emissive":  ["#FFB347"],
+    "forbidden": ["#00C2A8"]
+  },
+  "materials": [
+    "medieval_dressed_stone", "medieval_weathered_timber", "medieval_forged_iron", "medieval_leather_trim"
+  ],
+  "silhouette_language": "Grounded, weighty realism: tooled dressed-stone blocks, hand-adzed timber, hand-forged iron fittings with authentic pitting and grime; expect asymmetry and per-piece age variation rather than uniform repetition.",
+  "wear_range": [0.3, 0.75],
+  "detail_density_range": [0.3, 0.65],
+  "vision_style_brief": "Assets should read as historically grounded medieval construction under real weathering: muted stone and timber tones, dark forged-iron accents, believable grime and edge wear concentrated at handling points and ground contact. NOT: cartoon proportions, saturated primary colors, sci-fi emissive strips, pristine unweathered surfaces.",
+  "skybox_defaults": { "recipe": "overcast_castle_courtyard", "sun_elevation_deg": 30 }
+}
