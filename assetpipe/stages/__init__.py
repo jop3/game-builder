@@ -295,10 +295,20 @@ class SubprocessStages:
         resume_idx = stage_order(resume)
 
         shutil.copy2(prev_dir / "params.json", iter_dir / "params.json")
-        if resume_idx > stage_order("G") and (prev_dir / "asset.blend").exists():
-            shutil.copy2(prev_dir / "asset.blend", iter_dir / "asset.blend")
-        if resume_idx > stage_order("M") and (prev_dir / "maps").exists():
-            shutil.copytree(prev_dir / "maps", iter_dir / "maps", dirs_exist_ok=True)
+        if resume_idx > stage_order("G"):
+            for name in ("asset.blend", "result.json"):
+                # result.json is generate's record (root_object above all);
+                # static_validate/render of THIS iteration read it, and
+                # generate won't re-run to rewrite it (found when a resume-X
+                # iteration crashed static checks with object_name=None on
+                # real Blender).
+                if (prev_dir / name).exists():
+                    shutil.copy2(prev_dir / name, iter_dir / name)
+        if resume_idx > stage_order("M"):
+            if (prev_dir / "maps").exists():
+                shutil.copytree(prev_dir / "maps", iter_dir / "maps", dirs_exist_ok=True)
+            if (prev_dir / "bake_result.json").exists():
+                shutil.copy2(prev_dir / "bake_result.json", iter_dir / "bake_result.json")
         prev_result = self._read_json(prev_dir / "result.json")
         root_object = prev_result.get("root_object")
 
@@ -447,7 +457,14 @@ class SubprocessStages:
                 continue
             arr = np.asarray(Image.open(path).convert("RGB")).astype(np.float64) / 255.0
 
-            r = check_not_empty(arr, min_std=v.get("a1_min_std", 0.0078))
+            # lit_dark_* is dim BY DESIGN (spec 14.2 / the vision prompt's
+            # "dark regions there are EXPECTED"); its mean sits well under
+            # A1's default 1% floor on real renders, so only the std term
+            # (rim-lit edge present) meaningfully gates that view.
+            mean_lo = (v.get("a1_dark_view_mean_lo", 0.0005)
+                       if path.stem.startswith("lit_dark_")
+                       else v.get("a1_mean_lo", 0.01))
+            r = check_not_empty(arr, min_std=v.get("a1_min_std", 0.0078), mean_lo=mean_lo)
             if r["verdict"] == "fail":
                 blockers.append(_finding_from_check("A1", "RENDER_EMPTY", r, path.stem))
 

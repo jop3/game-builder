@@ -40,6 +40,8 @@ validation:
   s19a_wrap_seam_ratio_max: 1.5        # seam gradient vs interior p95 (relative, not absolute)
   s19b_rolled_seam_ratio_max: 1.5
   a1_min_std: 0.0078
+  a1_mean_lo: 0.01
+  a1_dark_view_mean_lo: 0.0005   # lit_dark_* views are dim by design (spec 14.2)
   a2_max_backface_fraction: 0.001
   a3_silhouette_range: [0.05, 0.85]
   a4_max_clipped_fraction: 0.02

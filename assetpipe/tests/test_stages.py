@@ -515,3 +515,18 @@ def test_a_check_blocker_short_circuits_vision_call(tmp_path, fake_blender):
 
     assert not result.passed
     assert any(f.defect_type == "SCALE_IMPLAUSIBLE" for f in result.blockers)
+
+
+def test_apply_fix_copies_generate_record_forward(tmp_path, fake_blender, monkeypatch):
+    """result.json (generate's record; root_object above all) must ride along
+    on any resume that skips generate -- static_validate/render of the fix
+    iteration read it (a resume-X iteration crashed the mesh checks with
+    object_name=None on real Blender)."""
+    stages, run_dir = make_stages(tmp_path, fake_blender)
+    stages.generate(1, seed=7)
+
+    plan = _fix_plan("X", "reexport", "GLTF_INVALID")
+    stages.apply_fix(2, plan)
+
+    iter2 = run_dir.iter_dir("crate_01", 2)
+    assert json.loads((iter2 / "result.json").read_text()).get("root_object")

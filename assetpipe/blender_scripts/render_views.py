@@ -144,6 +144,11 @@ def setup_lighting_rig(rig_id: str) -> None:
     bpy.context.scene.world = world
     world.use_nodes = True
     bg = world.node_tree.nodes.get("Background")
+    # Pin the dome color: a fresh world's Background node defaults to 0.05
+    # grey, which under AgX leaves even the L1 "neutral studio" renders murky
+    # (max pixel ~0.24 measured on real Blender 4.2). White dome; the rig's
+    # Strength input is the single exposure knob.
+    bg.inputs["Color"].default_value = (1.0, 1.0, 1.0, 1.0)
 
     if rig_id == "L1":
         bg.inputs["Strength"].default_value = 1.0
