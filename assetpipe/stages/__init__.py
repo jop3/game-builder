@@ -43,6 +43,7 @@ from typing import Callable
 import numpy as np
 from PIL import Image
 
+from assetpipe.blender_scripts import contact_sheets
 from assetpipe.contracts import Contracts, stage_order
 from assetpipe.fixes.apply import FixContext, apply_fix_plan
 from assetpipe.loop import InfraError, StageResult
@@ -210,7 +211,12 @@ class SubprocessStages:
         cmd = [self.blender_bin]
         if blend_path is not None:
             cmd.append(str(blend_path))
-        cmd += ["--background", "--python", str(script_path), "--", "--args-json", str(args_path)]
+        # --python-exit-code 1: without it Blender exits 0 even when the stage
+        # script raises, and the failure surfaces later as a confusing
+        # missing-artifact error in the *next* stage (verified against real
+        # Blender 4.2).
+        cmd += ["--background", "--python-exit-code", "1",
+                "--python", str(script_path), "--", "--args-json", str(args_path)]
 
         timeout = self._timeout(log_stem)
         self._log("stage_start", iteration=payload.get("iteration"), stage=log_stem)
@@ -232,8 +238,10 @@ class SubprocessStages:
                 self._log("stage_end", iteration=payload.get("iteration"), stage=log_stem,
                           verdict="ok")
                 return
-            failure = (f"exit {proc.returncode} (attempt {attempt + 1}): "
-                      f"{(proc.stderr or '')[-500:]}")
+            # Blender writes tracebacks to stderr but its own errors (missing
+            # .blend, unreadable file) to stdout -- surface whichever has content.
+            tail = (proc.stderr or "").strip() or (proc.stdout or "").strip()
+            failure = f"exit {proc.returncode} (attempt {attempt + 1}): {tail[-500:]}"
 
         self._log("error", iteration=payload.get("iteration"), stage=log_stem, error=failure)
         raise InfraError(f"{script_name} failed after retry: {failure}")
@@ -260,7 +268,7 @@ class SubprocessStages:
         material_recipe = self._material_recipe()
         self._run_blender("bake.py", iter_dir,
                           {"object_name": root_object, "material_recipe": material_recipe,
-                           "theme_id": self.request.get("theme"),
+                           "theme_id": self.request.get("theme"), "theme": self.theme,
                            "material_params": self.request.get("material_overrides", {}),
                            "palette": self.theme.get("palette", {}), "seed": seed,
                            "asset_dir": str(iter_dir), "out_dir": str(iter_dir),
@@ -302,11 +310,33 @@ class SubprocessStages:
                   failed=len(result.failed), params_changed=result.params_changed,
                   blender_actions=len(result.blender_actions))
 
-        if result.blender_actions:
+        if result.blender_actions and resume_idx <= stage_order("G"):
+            # A resume at G regenerates the mesh and re-runs M+X, so blender-
+            # side table fixes aimed at the previous iteration's state are
+            # superseded -- and the .blend they would operate on was
+            # deliberately not copied above. Running fixes.py here would open
+            # a nonexistent file (verified against real Blender 4.2).
+            self._log("fix_actions_skipped", iteration=iteration,
+                      reason="resume==G regenerates; blender-side actions superseded",
+                      skipped=[a.get("fix_id") for a in result.blender_actions])
+        elif result.blender_actions:
+            # fixes.py passes this payload straight to the fix functions as
+            # their ctx, and the rebake-family fixes hand it to
+            # bake.bake_all_maps -- so it must carry the full bake context,
+            # not just the mesh-fix keys (verified against real Blender).
+            texture_budget = (self._profile().get("textures", {})
+                              .get(self.request["category"], {}).get("albedo", 1024))
             self._run_blender("fixes.py", iter_dir,
                               {"asset_id": self.asset_id, "iteration": iteration,
                                "actions": result.blender_actions, "asset_dir": str(iter_dir),
-                               "request": self.request, "object_name": root_object},
+                               "request": self.request, "object_name": root_object,
+                               "material_recipe": self._material_recipe(),
+                               "theme_id": self.request.get("theme"), "theme": self.theme,
+                               "material_params": self.request.get("material_overrides", {}),
+                               "palette": self.theme.get("palette", {}),
+                               "seed": self.request["seed"],
+                               "texture_resolution": texture_budget,
+                               "tiling": self.request["category"] == "tiling_texture_set"},
                               "fixes", blend_path=iter_dir / "asset.blend")
 
         category = self.request["category"]
@@ -325,7 +355,7 @@ class SubprocessStages:
             material_recipe = self._material_recipe()
             self._run_blender("bake.py", iter_dir,
                               {"object_name": root_object, "material_recipe": material_recipe,
-                               "theme_id": self.request.get("theme"),
+                               "theme_id": self.request.get("theme"), "theme": self.theme,
                                "material_params": self.request.get("material_overrides", {}),
                                "palette": self.theme.get("palette", {}),
                                "seed": self.request["seed"], "asset_dir": str(iter_dir),
@@ -346,6 +376,11 @@ class SubprocessStages:
     def _expected_inventory(self, iter_dir: Path) -> dict:
         export_result = self._read_json(iter_dir / "export_result.json")
         lods = export_result.get("lods", [])
+        # Prefer the exporter's own record of what it wrote (root name carries
+        # the collision suffix; result.json's root_object predates it).
+        exported = export_result.get("exported_objects")
+        if exported:
+            return {"mesh_names": list(exported), "lod_names": lods}
         gen_result = self._read_json(iter_dir / "result.json")
         root_object = gen_result.get("root_object")
         if not lods and root_object is None:
@@ -432,7 +467,17 @@ class SubprocessStages:
                            "render_config": self.config.get("render", {}),
                            "iter_dir": str(iter_dir), "iteration": iteration}, "render")
 
-        self._a_blockers, self._a_warns = self._run_a_checks(iter_dir / "renders")
+        # Contact sheets (spec 14.3) are composed here, not inside Blender:
+        # composition is Pillow-based and Blender's bundled Python has no
+        # Pillow. The subprocess's result.json lists the rendered view ids.
+        renders_dir = iter_dir / "renders"
+        render_result = self._read_json(renders_dir / "result.json")
+        view_ids = render_result.get("views", []) or \
+            sorted(p.stem for p in renders_dir.glob("*.png")
+                   if not p.stem.startswith("contact_sheet"))
+        contact_sheets.compose_all(renders_dir, view_ids, renders_dir)
+
+        self._a_blockers, self._a_warns = self._run_a_checks(renders_dir)
 
     # ---------- V2 ----------
 

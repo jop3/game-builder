@@ -3,7 +3,7 @@
 # file (merged with a run-local override file), not hardcode them.
 toolchain:
   blender: "4.2"
-  godot: "4.3"
+  godot: "4.3+"   # floor (spec 3 pins Godot as "4.3+"); blender is an exact pin
   require_exact: true
 
 vision:

@@ -398,8 +398,12 @@ def test_apply_fix_resume_g_does_not_copy_blend_or_maps_forward(tmp_path, fake_b
     plan = _fix_plan("G", "cleanup_mesh", "NON_MANIFOLD")
     stages.apply_fix(2, plan)
 
+    # A resume at G regenerates the mesh, so blender-side actions targeting
+    # the previous iteration's state are skipped entirely -- there is no
+    # iter_02 .blend for fixes.py to open until generate.py runs (real
+    # Blender hard-fails on the missing file; the fake never noticed).
     calls = [json.loads(l)["script"] for l in log_path.read_text().splitlines()]
-    assert calls == ["fixes.py", "generate.py", "bake.py", "export_gltf.py"]
+    assert calls == ["generate.py", "bake.py", "export_gltf.py"]
 
 
 # ---------------------------------------------------------------------------

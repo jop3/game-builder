@@ -128,3 +128,33 @@ def test_clamp_patch_bounds_types_and_paths():
 def test_clamp_patch_caps_at_four_ops():
     raw = [{"op": "replace", "path": "/greeble_density", "value": 0.5}] * 6
     assert len(clamp_patch(raw, PARAM_SCHEMA, PARAMS)) <= 4
+
+
+def test_warn_actions_cannot_pull_resume_earlier_than_blockers():
+    """A warn-driven fix wanting an earlier resume stage than any blocker fix
+    is deferred, not planned: an earlier resume regenerates over the artifacts
+    the blocker fixes repair, so the blockers recur unchanged and the loop
+    no-progress-exits (observed end-to-end on real Blender 4.2)."""
+    blocker = f()                                             # VISIBLE_SEAM -> M
+    warn = f("S9", "SELF_INTERSECTION", severity="warn")      # llm patch -> G
+    plan = plan_fixes("a", 1, [blocker, warn], C, LADDER, PlannerState(), seed=7)
+    assert plan["resume_stage"] == "M"
+    assert all(a["type"] == "table_fix" for a in plan["actions"])
+    assert [d["deferred_for"] for d in plan["_deferred_warn_actions"]] == \
+        ["SELF_INTERSECTION"]
+    jsonschema.validate(strip_internal(plan), C.fix_plan_schema)
+
+
+def test_warn_actions_at_or_after_blocker_resume_still_ride_along():
+    blocker = f("R3", "INVERTED_NORMALS")                     # -> G resume
+    warn = f("S9", "SELF_INTERSECTION", severity="warn")      # llm patch -> G
+    plan = plan_fixes("a", 1, [blocker, warn], C, LADDER, PlannerState(), seed=7)
+    assert plan["resume_stage"] == "G"
+    assert {a["type"] for a in plan["actions"]} == {"table_fix", "llm_param_patch"}
+    assert plan["_deferred_warn_actions"] == []
+
+
+def test_blockers_pulling_resume_earlier_is_still_allowed():
+    plan = plan_fixes("a", 1, [f(), f("R3", "INVERTED_NORMALS")], C,
+                      LADDER, PlannerState(), seed=7)
+    assert plan["resume_stage"] == "G"      # both blockers: earliest wins as before

@@ -13,6 +13,17 @@ from pathlib import Path
 
 import bpy
 
+# Blender's bundled Python does not have this repo on sys.path when a stage
+# script is launched via `blender --background --python <this file>`; bootstrap
+# the repo root (two levels up) so `import assetpipe` works. Kept dependency-
+# free (os, not pathlib) and inserted before the first assetpipe import.
+import os as _os
+import sys as _sys
+
+_REPO_ROOT = _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+if _REPO_ROOT not in _sys.path:
+    _sys.path.insert(0, _REPO_ROOT)
+
 from assetpipe.blender_scripts import common, static_checks_mesh
 
 COLLISION_SUFFIX = {"convex": "-convcol", "static": "-col", "none": ""}
@@ -210,6 +221,10 @@ def main() -> None:
     mode = collision_mode(request)
     for obj in [root, *lods]:
         apply_collision_suffix(obj, mode)
+        # glTF names meshes after the mesh datablock; sync it to the (possibly
+        # suffixed) object name so the glb's mesh inventory matches what this
+        # result records (S20c compares the two).
+        obj.data.name = obj.name
 
     out_glb = asset_dir / f"{request['asset_id']}.glb"
     export({"request": request}, out_glb)
@@ -218,6 +233,11 @@ def main() -> None:
         "stage": "X", "glb": str(out_glb),
         "lods": [o.name for o in lods],
         "collision_mode": mode,
+        # The exact object/mesh names that went into the glb (root first) --
+        # the orchestrator's expected-inventory source of truth. root.name
+        # differs from result.json's root_object once the collision suffix
+        # is applied, so the orchestrator must not reconstruct this itself.
+        "exported_objects": [root.name, *(o.name for o in lods)],
     })
 
 

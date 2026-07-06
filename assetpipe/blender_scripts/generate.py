@@ -30,6 +30,17 @@ import bmesh
 import bpy
 from mathutils import Matrix
 
+# Blender's bundled Python does not have this repo on sys.path when a stage
+# script is launched via `blender --background --python <this file>`; bootstrap
+# the repo root (two levels up) so `import assetpipe` works. Kept dependency-
+# free (os, not pathlib) and inserted before the first assetpipe import.
+import os as _os
+import sys as _sys
+
+_REPO_ROOT = _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+if _REPO_ROOT not in _sys.path:
+    _sys.path.insert(0, _REPO_ROOT)
+
 from assetpipe.blender_scripts import common
 from assetpipe.generators import registry as gen_registry
 
@@ -163,11 +174,14 @@ def has_recipe_seams(obj: "bpy.types.Object") -> bool:
     return any(e.use_seam for e in obj.data.edges)
 
 
-def unwrap_by_seams(obj: "bpy.types.Object") -> None:
+def unwrap_by_seams(obj: "bpy.types.Object", island_margin: float = 0.0) -> None:
     bpy.context.view_layer.objects.active = obj
     bpy.ops.object.mode_set(mode='EDIT')
     bpy.ops.mesh.select_all(action='SELECT')
-    bpy.ops.uv.unwrap(method='ANGLE_BASED')
+    # margin matters here just like in smart_uv_project: the default of 0
+    # packs islands edge-to-edge, tripping S12e (bake-margin) and, with
+    # angle-based distortion, S12b overlaps (seen on real Blender 4.2).
+    bpy.ops.uv.unwrap(method='ANGLE_BASED', margin=island_margin)
     bpy.ops.object.mode_set(mode='OBJECT')
 
 
@@ -211,10 +225,10 @@ def run_uv_pass(obj: "bpy.types.Object", texture_resolution: int, tiling: bool,
     if tiling:
         box_project_uvs(obj, texel_density_px_per_m, texture_resolution)
         return
+    island_margin = UV_ISLAND_MARGIN_TEXELS / texture_resolution
     if has_recipe_seams(obj):
-        unwrap_by_seams(obj)
+        unwrap_by_seams(obj, island_margin)
     else:
-        island_margin = UV_ISLAND_MARGIN_TEXELS / texture_resolution
         smart_uv_project(obj, island_margin)
 
 
@@ -256,12 +270,20 @@ def main() -> None:
     # exact inputs on disk, and this is the fix loop's canonical editing surface.
     common.write_result(out_dir / "params.json", params)
 
+    # Start from an EMPTY scene: `blender --background` opens the default
+    # startup scene (Cube/Light/Camera), and the exporter exports the whole
+    # scene -- without this the default Cube ships inside every .glb
+    # (caught by S20c against real Blender 4.2).
+    bpy.ops.wm.read_factory_settings(use_empty=True)
     scene = bpy.context.scene
     deterministic_scene_settings(scene)
 
     root = module.generate(params, rng, theme)
     link_to_collection(root, ensure_export_collection())
     ensure_transforms_applied(root)
+    # glTF names meshes after the mesh datablock, not the object; keep them in
+    # sync so the S20c inventory check can compare against object names.
+    root.data.name = root.name
 
     budgets = profile.get("triangles", {}).get(category, {})
     tris = run_finishing_pass(root, budget_max=budgets.get("max", 10 ** 9),
