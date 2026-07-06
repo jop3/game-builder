@@ -57,12 +57,16 @@ unless `toolchain.require_exact: false`.
   `blender` executable, and the Godot adapter against a fake `godot` binary.
 - **Verified once against the real toolchain** (Blender 4.2.22 LTS + Godot
   4.6.3 headless, 2026-07): all nine generator recipes through G + the
-  S1–S12e mesh checks (every blocker passing), and the full crate loop
-  end-to-end — generate → bake → export → V1 → fix iterations (shrink at X)
-  → render → A-checks — with the vision stage stubbed. That pass is what
-  produced the sys.path bootstrap, `--python-exit-code`, PIL-free in-Blender
-  code, EMIT-based albedo bake, resume-stage semantics, and empty-scene
-  fixes; re-run the smoke after touching any of those seams.
+  S1–S12e mesh checks (every blocker passing); the full crate loop
+  end-to-end to `validated` — generate → bake → export → V1 fail
+  (FILE_TOO_LARGE) → shrink-at-X fix iteration → V1 pass → render →
+  A-checks — with the vision stage stubbed; occlusionTexture wiring
+  confirmed in the exported .glb (both LOD materials); and the Godot
+  adapter deliver + headless `--import` + `verify_import.gd` all green on a
+  scratch project. That pass is what produced the sys.path bootstrap,
+  `--python-exit-code`, PIL-free in-Blender code, EMIT-based albedo bake,
+  resume-stage semantics, and empty-scene fixes; re-run the smoke after
+  touching any of those seams.
 - **Still needs the real toolchain in CI:** golden generation tests (§21.2 —
   byte-stability across runs was not exercised), a rendered-fixture corpus
   for §21.1's vision tier, tiling/skybox/background branches (no recipe
