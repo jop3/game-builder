@@ -46,8 +46,10 @@ python -m assetpipe deliver  --run runs/<run_id> --adapter godot --project /path
 
 Requires on PATH (or via `--blender-bin` / `--godot-bin`): Blender 4.2 LTS,
 Godot 4.3+, and `ANTHROPIC_API_KEY` (or an `ant auth login` profile) for the
-vision stage. The §3 toolchain gate hard-fails a run on version mismatch
-unless `toolchain.require_exact: false`.
+vision stage. In a Claude Code remote container, `bash
+scripts/setup_toolchain.sh` provisions both binaries in one command (see
+`docs/NEXT_STEPS.md` for the resume-work guide). The §3 toolchain gate
+hard-fails a run on version mismatch unless `toolchain.require_exact: false`.
 
 ## Test tiers (spec §21) — what runs where
 
