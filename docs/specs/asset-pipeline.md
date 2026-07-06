@@ -101,6 +101,14 @@ other verified existing skill (see `docs/resources/claude-skills-for-godot.md`),
 implementation risk. The implementer should build §10's golden-fixture tests (§21) first for
 exactly this reason.
 
+**Companion skills (original, authored in this repo):** four skills under `.claude/skills/`
+encode the expert knowledge for the gap areas and should be loaded when implementing the
+corresponding stages — `blender-procedural-geometry` (§9, §13.1–13.2), `pbr-material-baking`
+(§10, §12.2, §13.3–13.4), `asset-visual-qa` (§13.5–§15), `godot-asset-import` (§18–§19).
+They are original (not externally verified) reference knowledge, distinct from the two
+vendored skills above; the pipeline test tiers in §21 are what validate their patterns in
+practice.
+
 ---
 
 ## 3. Toolchain and pinned versions

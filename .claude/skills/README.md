@@ -1,4 +1,27 @@
-# Vendored skills
+# Skills
+
+This directory contains two kinds of skills: **vendored** (copied from verified
+external repos) and **original** (authored in this repo for the asset pipeline).
+
+## Original skills (authored here)
+
+Written to cover the expert-knowledge gaps identified in
+`docs/specs/asset-pipeline.md` §2 — most importantly texture/material
+generation, which no verified external skill covers. Each skill states which
+spec sections it supports.
+
+| Skill | Domain | Supports spec |
+|---|---|---|
+| `blender-procedural-geometry` | bmesh generator recipes, mesh/UV validation, budgets/LODs, stylized rigging | §9, §13.1–13.2 |
+| `pbr-material-baking` | Procedural PBR node graphs, Cycles channel baking, ORM packing, seamless tiling | §10, §12.2, §13.3–13.4 |
+| `asset-visual-qa` | Deterministic headless renders, scripted image analytics, glTF checks, vision-model rubrics | §13.5, §14, §15 |
+| `godot-asset-import` | Godot 4 headless import, suffix conventions, post-import scripts, verification | §18, §19 |
+
+These are original design (not externally verified); their code blocks are
+reference patterns written against Blender 4.2 LTS / Godot 4.3 and should be
+validated by the pipeline's own test tiers (spec §21) as they get implemented.
+
+## Vendored skills
 
 These are committed copies of specific Claude Code skills verified against
 their source repos (see `docs/resources/claude-skills-for-godot.md` for the
