@@ -150,6 +150,31 @@ def _target_image(nt, name: str, resolution: int, colorspace: str, float_buffer:
     return img, tex_node
 
 
+def _as_mats(mat_or_mats) -> list:
+    """The bake_* functions accept a single material (historical call shape,
+    still used by fixes.py for single-slot assets) or the full slot list of a
+    multi-material asset."""
+    if isinstance(mat_or_mats, (list, tuple)):
+        return [m for m in mat_or_mats if m is not None]
+    return [mat_or_mats]
+
+
+def _shared_target(mats: list, name: str, resolution: int, colorspace: str):
+    """One bake-target image, referenced by a selected+active image node in
+    EVERY slot material -- Cycles bakes an object across all its material
+    slots, and each slot's node tree must point at the target or that slot's
+    faces land nowhere (multi-material atlas bake)."""
+    img = bpy.data.images.new(name, width=resolution, height=resolution,
+                              alpha=False, float_buffer=True)
+    img.colorspace_settings.name = colorspace
+    for mat in mats:
+        nt = mat.node_tree
+        tex_node = nt.nodes.new('ShaderNodeTexImage')
+        tex_node.image = img
+        nt.nodes.active = tex_node
+    return img
+
+
 def _pixels_to_array(img) -> "np.ndarray":
     """Image pixels as a top-down ``(H, W, 4)`` float32 array. Blender stores
     pixel rows bottom-up; flip so row 0 is the image's top row."""
@@ -188,31 +213,79 @@ def _select_active(obj) -> None:
     bpy.context.view_layer.objects.active = obj
 
 
-def bake_albedo(obj, mat: "bpy.types.Material", resolution: int, out_path: Path) -> Path:
+def _bake_inputs_via_emit(mats: list, socket_name: str, resolution: int, name: str,
+                          samples: int, colorspace: str = 'Non-Color') -> "bpy.types.Image":
+    """spec 10.3 step 3 / pbr-material-baking skill's EMIT-reroute trick:
+    Cycles cannot bake an arbitrary socket directly, so temporarily wire the
+    signal into an Emission shader and bake EMIT (exact, sample-independent).
+    Works for scalar sockets (Roughness/Metallic) and color sockets (Base
+    Color) alike. Applied to EVERY slot material simultaneously before the
+    single bake call, so multi-material assets bake all slots into one
+    shared target (atlas bake)."""
+    scene = bpy.context.scene
+    scene.cycles.samples = samples
+    img = _shared_target(mats, name, resolution, colorspace)
+    restores = []
+    for mat in mats:
+        nt = mat.node_tree
+        bsdf = next(n for n in nt.nodes if n.type == 'BSDF_PRINCIPLED')
+        out_node = next(n for n in nt.nodes if n.type == 'OUTPUT_MATERIAL')
+        input_socket = bsdf.inputs[socket_name]
+        emit = nt.nodes.new('ShaderNodeEmission')
+        # ``input_socket`` is an *input* socket (e.g. bsdf.inputs['Roughness']);
+        # links.new needs an output as source. Feed emission from whatever
+        # drives the socket, or from a temp node holding its constant default
+        # (verified against real Blender 4.2 -- linking input->input is invalid).
+        temp_value = None
+        if input_socket.links:
+            src = input_socket.links[0].from_socket
+        elif input_socket.type == 'RGBA':
+            temp_value = nt.nodes.new('ShaderNodeRGB')
+            temp_value.outputs[0].default_value = tuple(input_socket.default_value)
+            src = temp_value.outputs[0]
+        else:
+            temp_value = nt.nodes.new('ShaderNodeValue')
+            temp_value.outputs[0].default_value = float(input_socket.default_value)
+            src = temp_value.outputs[0]
+        nt.links.new(src, emit.inputs['Color'])
+        surface_input = out_node.inputs['Surface']
+        old_from = surface_input.links[0].from_socket if surface_input.links else None
+        nt.links.new(emit.outputs['Emission'], surface_input)
+        restores.append((nt, emit, temp_value, old_from, surface_input))
+    bpy.ops.object.bake(type='EMIT')
+    for nt, emit, temp_value, old_from, surface_input in restores:
+        if old_from is not None:
+            nt.links.new(old_from, surface_input)
+        nt.nodes.remove(emit)
+        if temp_value is not None:
+            nt.nodes.remove(temp_value)
+    return img
+
+
+def bake_albedo(obj, mat, resolution: int, out_path: Path) -> Path:
     """spec 10.3 step 1, corrected against real Blender 4.2: bake the Base
     Color *input signal* via the EMIT reroute rather than a ``DIFFUSE``
     color-only pass. The diffuse color pass is weighted by the diffuse
     closure, which is ZERO wherever metallic=1 -- fully-metal materials bake
     an all-black albedo (trips S16). EMIT of the Base Color input is exact
     for every metallic value and matches glTF ``baseColorTexture`` semantics
-    (the metalness split lives in the ORM map, not in the albedo)."""
-    scene = bpy.context.scene
-    nt = mat.node_tree
-    bsdf = next(n for n in nt.nodes if n.type == 'BSDF_PRINCIPLED')
-    out_node = next(n for n in nt.nodes if n.type == 'OUTPUT_MATERIAL')
+    (the metalness split lives in the ORM map, not in the albedo).
+
+    ``mat`` may be one material or the full slot list (multi-material)."""
     _select_active(obj)
-    img = _bake_input_via_emit(nt, bsdf.inputs['Base Color'], out_node, resolution,
-                               "albedo_bake", samples=BAKE_SAMPLES_COLOR,
-                               colorspace='sRGB')
+    img = _bake_inputs_via_emit(_as_mats(mat), 'Base Color', resolution,
+                                "albedo_bake", samples=BAKE_SAMPLES_COLOR,
+                                colorspace='sRGB')
     img.filepath_raw = str(out_path)
     img.file_format = 'PNG'
     img.save()
     return out_path
 
 
-def bake_normal(obj, mat: "bpy.types.Material", resolution: int, out_path: Path) -> Path:
+def bake_normal(obj, mat, resolution: int, out_path: Path) -> Path:
     """spec 10.3 step 2: ``NORMAL`` bake, tangent space, OpenGL +Y (glTF
-    convention -- POS_Y green, NOT DirectX NEG_Y)."""
+    convention -- POS_Y green, NOT DirectX NEG_Y). ``mat`` may be one
+    material or the full slot list."""
     scene = bpy.context.scene
     scene.cycles.samples = BAKE_SAMPLES_NORMAL_AO
     scene.render.bake.normal_space = 'TANGENT'
@@ -220,7 +293,7 @@ def bake_normal(obj, mat: "bpy.types.Material", resolution: int, out_path: Path)
     scene.render.bake.normal_g = 'POS_Y'
     scene.render.bake.normal_b = 'POS_Z'
     _select_active(obj)
-    img, _ = _target_image(mat.node_tree, "normal_bake", resolution, 'Non-Color')
+    img = _shared_target(_as_mats(mat), "normal_bake", resolution, 'Non-Color')
     bpy.ops.object.bake(type='NORMAL')
     img.filepath_raw = str(out_path)
     img.file_format = 'PNG'
@@ -229,66 +302,26 @@ def bake_normal(obj, mat: "bpy.types.Material", resolution: int, out_path: Path)
     return out_path
 
 
-def _bake_input_via_emit(nt, input_socket, out_node, resolution: int, name: str,
-                         samples: int, colorspace: str = 'Non-Color') -> "bpy.types.Image":
-    """spec 10.3 step 3 / pbr-material-baking skill's EMIT-reroute trick:
-    Cycles cannot bake an arbitrary socket directly, so temporarily wire the
-    signal into an Emission shader and bake EMIT (exact, sample-independent).
-    Works for scalar sockets (Roughness/Metallic) and color sockets (Base
-    Color) alike."""
-    scene = bpy.context.scene
-    scene.cycles.samples = samples
-    img, _ = _target_image(nt, name, resolution, colorspace)
-    emit = nt.nodes.new('ShaderNodeEmission')
-    # ``input_socket`` is an *input* socket (e.g. bsdf.inputs['Roughness']);
-    # links.new needs an output as source. Feed emission from whatever drives
-    # the socket, or from a temp node holding its constant default
-    # (verified against real Blender 4.2 -- linking input->input is invalid).
-    temp_value = None
-    if input_socket.links:
-        src = input_socket.links[0].from_socket
-    elif input_socket.type == 'RGBA':
-        temp_value = nt.nodes.new('ShaderNodeRGB')
-        temp_value.outputs[0].default_value = tuple(input_socket.default_value)
-        src = temp_value.outputs[0]
-    else:
-        temp_value = nt.nodes.new('ShaderNodeValue')
-        temp_value.outputs[0].default_value = float(input_socket.default_value)
-        src = temp_value.outputs[0]
-    nt.links.new(src, emit.inputs['Color'])
-    surface_input = out_node.inputs['Surface']
-    old_from = surface_input.links[0].from_socket if surface_input.links else None
-    nt.links.new(emit.outputs['Emission'], surface_input)
-    bpy.ops.object.bake(type='EMIT')
-    if old_from is not None:
-        nt.links.new(old_from, surface_input)
-    nt.nodes.remove(emit)
-    if temp_value is not None:
-        nt.nodes.remove(temp_value)
-    return img
-
-
-def bake_orm(obj, mat: "bpy.types.Material", resolution: int, out_path: Path,
+def bake_orm(obj, mat, resolution: int, out_path: Path,
              ao_samples: int = BAKE_SAMPLES_NORMAL_AO) -> Path:
     """spec 10.3 step 3: AO via ``AO`` bake; roughness/metallic via the
     EMIT-reroute trick; composited R=AO G=roughness B=metallic with NumPy
-    (linear, no alpha channel -- glTF ORM convention)."""
+    (linear, no alpha channel -- glTF ORM convention). ``mat`` may be one
+    material or the full slot list."""
     import numpy as np
 
     scene = bpy.context.scene
-    nt = mat.node_tree
-    bsdf = next(n for n in nt.nodes if n.type == 'BSDF_PRINCIPLED')
-    out_node = next(n for n in nt.nodes if n.type == 'OUTPUT_MATERIAL')
+    mats = _as_mats(mat)
 
     _select_active(obj)
     scene.cycles.samples = ao_samples
-    ao_img, _ = _target_image(nt, "ao_bake", resolution, 'Non-Color')
+    ao_img = _shared_target(mats, "ao_bake", resolution, 'Non-Color')
     bpy.ops.object.bake(type='AO')
 
-    rough_img = _bake_input_via_emit(nt, bsdf.inputs['Roughness'], out_node,
-                                     resolution, "rough_bake", samples=1)
-    metal_img = _bake_input_via_emit(nt, bsdf.inputs['Metallic'], out_node,
-                                     resolution, "metal_bake", samples=1)
+    rough_img = _bake_inputs_via_emit(mats, 'Roughness', resolution,
+                                      "rough_bake", samples=1)
+    metal_img = _bake_inputs_via_emit(mats, 'Metallic', resolution,
+                                      "metal_bake", samples=1)
 
     def to_array(img) -> "np.ndarray":
         # _pixels_to_array flips to top-down; _save_rgb8_png flips back on
@@ -303,13 +336,15 @@ def bake_orm(obj, mat: "bpy.types.Material", resolution: int, out_path: Path,
     return out_path
 
 
-def bake_emissive(obj, mat: "bpy.types.Material", resolution: int, out_path: Path) -> Path:
-    """spec 10.3 step 4: only if the recipe declares an emissive map -- bake
-    ``EMIT`` with the real emission wiring (no reroute needed)."""
+def bake_emissive(obj, mat, resolution: int, out_path: Path) -> Path:
+    """spec 10.3 step 4: only if a recipe declares an emissive map -- bake
+    ``EMIT`` with the real emission wiring (no reroute needed). Slot
+    materials without emission contribute black, which is exactly the glTF
+    emissiveTexture semantics for non-emissive regions."""
     scene = bpy.context.scene
     scene.cycles.samples = BAKE_SAMPLES_COLOR
     _select_active(obj)
-    img, _ = _target_image(mat.node_tree, "emissive_bake", resolution, 'sRGB')
+    img = _shared_target(_as_mats(mat), "emissive_bake", resolution, 'sRGB')
     bpy.ops.object.bake(type='EMIT')
     img.filepath_raw = str(out_path)
     img.file_format = 'PNG'
@@ -360,35 +395,48 @@ def dither_quantize(float01, rng_np):
 # ---------------------------------------------------------------------------
 
 def bake_all_maps(ctx: dict, resolution_override: int | None = None, tiling: bool = False) -> dict:
-    """Build the material recipe's node graph and bake every map it
-    declares (``BAKES``). ``ctx`` carries: ``object_name``, ``material_recipe``
-    (dotted path), ``material_params``, ``palette``, ``seed``, ``asset_dir``,
-    ``texture_resolution``. Used by both this module's ``main()`` and by the
-    rebake-family fix functions in ``fixes.py``."""
+    """Build the material recipe node graph(s) and bake every map declared
+    (union of the recipes' ``BAKES``). ``ctx`` carries: ``object_name``,
+    ``material_recipe`` (single id) or ``material_recipes`` (per-slot id
+    list, matching the generator's ``face.material_index`` assignments --
+    spec 10.2's "generators may pick per-slot materials"), ``material_params``,
+    ``palette``, ``seed``, ``asset_dir``, ``texture_resolution``. Used by both
+    this module's ``main()`` and by the rebake-family fix functions in
+    ``fixes.py``. All slots bake into ONE shared map set (atlas bake)."""
     obj = bpy.data.objects[ctx["object_name"]]
-    recipe = load_material_recipe(ctx["material_recipe"], ctx.get("theme_id"))
+    recipe_ids = list(ctx.get("material_recipes") or [ctx["material_recipe"]])
     rng = common.seeded_random(int(ctx.get("seed", 0)))
     resolution = resolution_override or ctx.get("texture_resolution", 1024)
 
-    mat = new_material(f"{obj.name}_material")
-    if obj.data.materials:
-        obj.data.materials[0] = mat
-    else:
+    recipes, mats = [], []
+    for i, recipe_id in enumerate(recipe_ids):
+        recipe = load_material_recipe(recipe_id, ctx.get("theme_id"))
+        suffix = f"_material_{i}" if len(recipe_ids) > 1 else "_material"
+        mat = new_material(f"{obj.name}{suffix}")
+        # Spec 9.3 applies to material recipes too (10.2: "same rules as
+        # generator schemas"): defaults -> theme clamps -> seeded jitter ->
+        # request overrides. ctx["material_params"] holds only the request's
+        # material_overrides, so recipes indexing params["<name>"] need the
+        # schema defaults resolved here.
+        params = common.resolve_params(getattr(recipe, "PARAM_SCHEMA", {}) or {},
+                                       ctx.get("theme") or {},
+                                       ctx.get("material_params") or {}, rng)
+        recipe.build(mat.node_tree, params, rng, ctx.get("palette", {}))
+        recipes.append(recipe)
+        mats.append(mat)
+
+    # Slot list mirrors recipe_ids exactly; face.material_index values set by
+    # the generator recipe point into it. Out-of-range indices clamp to 0 in
+    # Blender, so a single-material asset keeps working unchanged.
+    obj.data.materials.clear()
+    for mat in mats:
         obj.data.materials.append(mat)
-    # Spec 9.3 applies to material recipes too (10.2: "same rules as generator
-    # schemas"): defaults -> theme clamps -> seeded jitter -> request overrides.
-    # ctx["material_params"] holds only the request's material_overrides, so
-    # recipes indexing params["<name>"] need the schema defaults resolved here.
-    params = common.resolve_params(getattr(recipe, "PARAM_SCHEMA", {}) or {},
-                                   ctx.get("theme") or {},
-                                   ctx.get("material_params") or {}, rng)
-    recipe.build(mat.node_tree, params, rng, ctx.get("palette", {}))
 
     if tiling:
-        if not getattr(recipe, "TILING", False):
+        if not getattr(recipes[0], "TILING", False):
             raise RuntimeError(
                 f"tiling bake requested but material recipe "
-                f"{ctx['material_recipe']!r} does not declare TILING = True "
+                f"{recipe_ids[0]!r} does not declare TILING = True "
                 f"(spec 10.2) -- its bake cannot be seamless")
         # The recipe must actually route through the periodic domain: raises
         # if no periodic-coordinate group exists in the .blend at all.
@@ -399,17 +447,20 @@ def bake_all_maps(ctx: dict, resolution_override: int | None = None, tiling: boo
     maps_dir = Path(ctx["asset_dir"]) / "maps"
     written: dict[str, str] = {}
 
-    bakes = set(getattr(recipe, "BAKES", ["albedo", "normal", "orm"]))
+    bakes: set = set()
+    for recipe in recipes:
+        bakes |= set(getattr(recipe, "BAKES", ["albedo", "normal", "orm"]))
     if "albedo" in bakes:
-        written["albedo"] = str(bake_albedo(obj, mat, resolution, maps_dir / MAP_FILENAMES["albedo"]))
+        written["albedo"] = str(bake_albedo(obj, mats, resolution, maps_dir / MAP_FILENAMES["albedo"]))
     if "normal" in bakes:
-        written["normal"] = str(bake_normal(obj, mat, resolution, maps_dir / MAP_FILENAMES["normal"]))
+        written["normal"] = str(bake_normal(obj, mats, resolution, maps_dir / MAP_FILENAMES["normal"]))
     if "orm" in bakes:
-        written["orm"] = str(bake_orm(obj, mat, resolution, maps_dir / MAP_FILENAMES["orm"]))
+        written["orm"] = str(bake_orm(obj, mats, resolution, maps_dir / MAP_FILENAMES["orm"]))
     if "emissive" in bakes:
-        written["emissive"] = str(bake_emissive(obj, mat, resolution, maps_dir / MAP_FILENAMES["emissive"]))
+        written["emissive"] = str(bake_emissive(obj, mats, resolution, maps_dir / MAP_FILENAMES["emissive"]))
 
-    return {"stage": "M", "material_recipe": ctx["material_recipe"], "maps": written}
+    return {"stage": "M", "material_recipe": recipe_ids[0],
+            "material_recipes": recipe_ids, "maps": written}
 
 
 def main() -> None:

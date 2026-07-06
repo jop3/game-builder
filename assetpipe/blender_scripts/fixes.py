@@ -290,9 +290,9 @@ def rebake_normal(ctx: dict, action: dict) -> dict:
     Non-Color float buffer and re-bake the ``NORMAL`` pass with the OpenGL
     (POS_Y) swizzle (spec 16.2, 10.3)."""
     obj = _get_object(ctx)
-    mat = obj.active_material
+    mats = [m for m in obj.data.materials if m] or [obj.active_material]
     out_path = Path(ctx["asset_dir"]) / "maps" / "normal.png"
-    bake.bake_normal(obj, mat, ctx.get("texture_resolution", 1024), out_path)
+    bake.bake_normal(obj, mats, ctx.get("texture_resolution", 1024), out_path)
     return {"fix_id": "rebake_normal", "object": obj.name, "path": str(out_path)}
 
 

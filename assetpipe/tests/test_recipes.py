@@ -17,6 +17,7 @@ EXPECTED_RECIPES = {
     "props/lantern": "prop_small",
     "env/rock": "environment_piece",
     "env/tree_lowpoly": "environment_piece",
+    "env/house": "environment_piece",
     "kit/wall": "modular_kit_piece",
     "kit/floor": "modular_kit_piece",
     "kit/doorway": "modular_kit_piece",

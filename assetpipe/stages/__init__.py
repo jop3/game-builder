@@ -204,6 +204,22 @@ class SubprocessStages:
                 return tiling_id
         return materials[0]
 
+    def _material_recipes(self, iter_dir: Path) -> list | None:
+        """Per-slot material recipe id list for multi-material assets
+        (spec 10.2: "generators may pick per-slot materials"). The
+        generator's resolved params (params.json, written by generate.py)
+        carry a ``materials`` list matching the recipe's face
+        ``material_index`` assignments; when present and non-empty it is the
+        bake's slot list. None -> single ``_material_recipe()`` applies."""
+        try:
+            params = json.loads((iter_dir / "params.json").read_text())
+        except (OSError, json.JSONDecodeError, FileNotFoundError):
+            return None
+        materials = params.get("materials")
+        if isinstance(materials, list) and materials:
+            return [str(m) for m in materials]
+        return None
+
     def _first_tiling_material(self, materials: list) -> str | None:
         from assetpipe.themes_io import ThemeIOError, load_material_recipe
         themes_root = self.config.get("themes_root") or \
@@ -289,6 +305,7 @@ class SubprocessStages:
         material_recipe = self._material_recipe()
         self._run_blender("bake.py", iter_dir,
                           {"object_name": root_object, "material_recipe": material_recipe,
+                           "material_recipes": self._material_recipes(iter_dir),
                            "theme_id": self.request.get("theme"), "theme": self.theme,
                            "material_params": self.request.get("material_overrides", {}),
                            "palette": self.theme.get("palette", {}), "seed": seed,
@@ -379,6 +396,7 @@ class SubprocessStages:
                                "actions": result.blender_actions, "asset_dir": str(iter_dir),
                                "request": self.request, "object_name": root_object,
                                "material_recipe": self._material_recipe(),
+                               "material_recipes": self._material_recipes(iter_dir),
                                "theme_id": self.request.get("theme"), "theme": self.theme,
                                "material_params": self.request.get("material_overrides", {}),
                                "palette": self.theme.get("palette", {}),
@@ -403,6 +421,7 @@ class SubprocessStages:
             material_recipe = self._material_recipe()
             self._run_blender("bake.py", iter_dir,
                               {"object_name": root_object, "material_recipe": material_recipe,
+                               "material_recipes": self._material_recipes(iter_dir),
                                "theme_id": self.request.get("theme"), "theme": self.theme,
                                "material_params": self.request.get("material_overrides", {}),
                                "palette": self.theme.get("palette", {}),
