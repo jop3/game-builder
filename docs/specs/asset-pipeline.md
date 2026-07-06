@@ -1,14 +1,11 @@
 # Autonomous Game Asset Generation Pipeline — Architecture Specification
 
-**Status:** Design specification, ready for implementation. Code blocks in this document are
-normative reference implementations for the builder to start from. **Partially implemented:**
-the judgment-critical core (contracts/taxonomy/rubric data, contract loader, vision prompt +
-report semantics, fix planner + escalation ladder, repair-loop state machine, pixel analytics,
-GLB structural checks, platform profiles, config defaults) now exists **and is tested** under
-`assetpipe/` — see `assetpipe/README.md` for exactly what is built, what remains, and the
-invariants to preserve. Where this document and the tested code differ (currently only the
-§13.4 tiling checks, corrected to relative gradient ratios), the code + its tests are
-authoritative and this document has been updated to match.
+**Status:** Implemented. All components in this document exist under `assetpipe/` (plus the
+top-level `themes/` packs) — see `assetpipe/README.md` for the module map, how to run the
+pipeline, which spec §21 test tiers run in pure-Python CI versus which need the real pinned
+toolchain, and the invariants to preserve. Where this document and the tested code differ
+(currently only the §13.4 tiling checks, corrected to relative gradient ratios), the code +
+its tests are authoritative and this document has been updated to match.
 **Version:** 1.1
 **Date:** 2026-07-06
 **Audience:** An implementing model/engineer. This document is intended to be sufficient to build

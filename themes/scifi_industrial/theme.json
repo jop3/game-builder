@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "theme_id": "scifi_industrial",
+  "display_name": "Sci-Fi Industrial",
+  "palette": {
+    "primary":   ["#2E3A46", "#41525F"],
+    "secondary": ["#8C959D", "#B0B7BD"],
+    "accent":    ["#00C2A8", "#FF6A00"],
+    "emissive":  ["#00C2A8", "#FFD24A"],
+    "forbidden": ["#8B4513"]
+  },
+  "materials": [
+    "scifi_hull_metal", "scifi_scuffed_paint", "scifi_rubber_trim",
+    "scifi_emissive_strip", "scifi_deck_plate"
+  ],
+  "silhouette_language": "Chamfered boxes and cylinders, panel lines, greebles on 10-20% of surface area, functional details (vents, bolts, handles). No organic curves except cabling.",
+  "wear_range": [0.15, 0.55],
+  "detail_density_range": [0.3, 0.7],
+  "vision_style_brief": "Assets should read as functional, mass-produced industrial sci-fi equipment: desaturated blue-grey metals, bright teal or orange accents used sparingly (<10% of surface), visible panel seams and edge wear on chamfers, subtle emissive elements. NOT: fantasy ornamentation, wood, bright saturated primary colors covering large areas.",
+  "skybox_defaults": { "recipe": "space_station_interior", "sun_elevation_deg": 25 }
+}

@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "theme_id": "lowpoly_stylized",
+  "display_name": "Lowpoly Stylized",
+  "palette": {
+    "primary":   ["#7FB069", "#4C8C4A"],
+    "secondary": ["#E8C170", "#D9A441"],
+    "accent":    ["#4EA5D9", "#E85D4E"],
+    "emissive":  ["#FFF275"],
+    "forbidden": ["#FF00FF"]
+  },
+  "materials": [
+    "lowpoly_flat_terrain", "lowpoly_flat_foliage", "lowpoly_flat_stone", "lowpoly_flat_wood"
+  ],
+  "silhouette_language": "Simple faceted primitives, flat-shaded so each face reads as a solid color block; forms are communicated purely through silhouette and vertex-color blocking, never surface micro-detail.",
+  "wear_range": [0.0, 0.15],
+  "detail_density_range": [0.0, 0.1],
+  "vision_style_brief": "Assets should read as clean low-poly stylization: bright, saturated flat colors with hard-edged shading transitions between faces, no visible texture grain or wear, no PBR sheen. NOT: photoreal materials, gradients within a single face, metallic highlights, fine surface noise.",
+  "skybox_defaults": { "recipe": "flat_gradient_sky", "sun_elevation_deg": 45 }
+}
