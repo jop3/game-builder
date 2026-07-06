@@ -311,6 +311,7 @@ class SubprocessStages:
                            "palette": self.theme.get("palette", {}), "seed": seed,
                            "asset_dir": str(iter_dir), "out_dir": str(iter_dir),
                            "texture_resolution": texture_budget,
+                           "texture_resolutions": profile.get("textures", {}).get(category, {}),
                            "tiling": category == "tiling_texture_set",
                            "iteration": iteration},
                           "bake", blend_path=iter_dir / "asset.blend")
@@ -402,6 +403,8 @@ class SubprocessStages:
                                "palette": self.theme.get("palette", {}),
                                "seed": self.request["seed"],
                                "texture_resolution": texture_budget,
+                               "texture_resolutions": (self._profile().get("textures", {})
+                                                       .get(self.request["category"], {})),
                                "tiling": self.request["category"] == "tiling_texture_set"},
                               "fixes", blend_path=iter_dir / "asset.blend")
 
@@ -427,6 +430,7 @@ class SubprocessStages:
                                "palette": self.theme.get("palette", {}),
                                "seed": self.request["seed"], "asset_dir": str(iter_dir),
                                "out_dir": str(iter_dir), "texture_resolution": texture_budget,
+                               "texture_resolutions": profile.get("textures", {}).get(category, {}),
                                "tiling": category == "tiling_texture_set", "iteration": iteration},
                               "bake", blend_path=iter_dir / "asset.blend")
         if map_actions:

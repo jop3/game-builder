@@ -407,6 +407,15 @@ def bake_all_maps(ctx: dict, resolution_override: int | None = None, tiling: boo
     recipe_ids = list(ctx.get("material_recipes") or [ctx["material_recipe"]])
     rng = common.seeded_random(int(ctx.get("seed", 0)))
     resolution = resolution_override or ctx.get("texture_resolution", 1024)
+    # Per-map budgets (profile textures.<category>, e.g. emissive is 512 on
+    # web while albedo is 1024 -- S14 checks each map against its own cap, so
+    # baking everything at the albedo budget hard-fails the emissive).
+    per_map = ctx.get("texture_resolutions") or {}
+
+    def map_resolution(map_name: str) -> int:
+        if resolution_override is not None:
+            return min(resolution_override, int(per_map.get(map_name) or resolution_override))
+        return int(per_map.get(map_name) or resolution)
 
     recipes, mats = [], []
     for i, recipe_id in enumerate(recipe_ids):
@@ -451,13 +460,17 @@ def bake_all_maps(ctx: dict, resolution_override: int | None = None, tiling: boo
     for recipe in recipes:
         bakes |= set(getattr(recipe, "BAKES", ["albedo", "normal", "orm"]))
     if "albedo" in bakes:
-        written["albedo"] = str(bake_albedo(obj, mats, resolution, maps_dir / MAP_FILENAMES["albedo"]))
+        written["albedo"] = str(bake_albedo(obj, mats, map_resolution("albedo"),
+                                            maps_dir / MAP_FILENAMES["albedo"]))
     if "normal" in bakes:
-        written["normal"] = str(bake_normal(obj, mats, resolution, maps_dir / MAP_FILENAMES["normal"]))
+        written["normal"] = str(bake_normal(obj, mats, map_resolution("normal"),
+                                            maps_dir / MAP_FILENAMES["normal"]))
     if "orm" in bakes:
-        written["orm"] = str(bake_orm(obj, mats, resolution, maps_dir / MAP_FILENAMES["orm"]))
+        written["orm"] = str(bake_orm(obj, mats, map_resolution("orm"),
+                                      maps_dir / MAP_FILENAMES["orm"]))
     if "emissive" in bakes:
-        written["emissive"] = str(bake_emissive(obj, mats, resolution, maps_dir / MAP_FILENAMES["emissive"]))
+        written["emissive"] = str(bake_emissive(obj, mats, map_resolution("emissive"),
+                                                maps_dir / MAP_FILENAMES["emissive"]))
 
     return {"stage": "M", "material_recipe": recipe_ids[0],
             "material_recipes": recipe_ids, "maps": written}
