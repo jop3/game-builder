@@ -39,22 +39,23 @@ def _place_edge_sockets(root_obj, thickness):
     ):
         for i in range(n + 1):
             x = -WIDTH_M / 2.0 + i * GRID
-            common.add_socket(root_obj, f"SOCKET_{label}_{i}", (x, thickness / 2.0, fixed))
+            common.add_socket(root_obj, f"SOCKET_{label}_{i}", (x, 0.0, fixed))
     for label, fixed_x in (("LEFT", -WIDTH_M / 2.0), ("RIGHT", WIDTH_M / 2.0)):
         for i in range(n + 1):
             z = i * GRID
-            common.add_socket(root_obj, f"SOCKET_{label}_{i}", (fixed_x, thickness / 2.0, z))
+            common.add_socket(root_obj, f"SOCKET_{label}_{i}", (fixed_x, 0.0, z))
 
 
 def generate(params: dict, rng, theme: dict):
     """Build and return the doorway panel's root object.
 
-    Deterministic given ``(params, rng)``: the door opening is boolean-cut
-    from the wall slab at exact parametric dimensions -- no randomness
-    needed for a modular kit piece's silhouette. bmesh boolean is the one
-    place the ``blender-procedural-geometry`` skill recommends avoiding
-    where possible; here it is unavoidable (a true hole through the slab)
-    so the finishing pass afterwards cleans up any slivers it leaves.
+    Deterministic given ``(params, rng)``: no randomness is needed for a
+    modular kit piece's silhouette. The opening is NOT boolean-cut: bmesh has
+    no boolean operator at all (``bmesh.ops.boolean`` does not exist --
+    verified on real Blender 4.2; ``bmesh.ops.create_cube`` also returns only
+    ``verts``, so the original cut code could never run). Instead the panel
+    is a single notched profile polygon extruded through the wall thickness,
+    which is manifold by construction and leaves no boolean slivers.
     """
     import bmesh
 
@@ -64,25 +65,33 @@ def generate(params: dict, rng, theme: dict):
     door_w = params["door_width_m"]
     door_h = params["door_height_m"]
 
+    half_w = WIDTH_M / 2.0
+    half_t = thickness / 2.0
+    half_dw = door_w / 2.0
+
+    # Cross-section in the XZ plane: outer rectangle with a door notch cut
+    # from the floor line; wound counter-clockwise, z from 0 (floor) to top.
+    profile = [(-half_w, 0.0), (-half_dw, 0.0), (-half_dw, door_h),
+               (half_dw, door_h), (half_dw, 0.0), (half_w, 0.0),
+               (half_w, HEIGHT_M), (-half_w, HEIGHT_M)]
+
     bm = bmesh.new()
-    wall = bmesh.ops.create_cube(bm, size=1.0)
-    bmesh.ops.scale(bm, verts=wall["verts"], vec=(WIDTH_M, thickness, HEIGHT_M))
-
-    # Door opening: an oversized box (deeper than the wall on Y) booleaned
-    # out, centered on X, sitting on the floor (min Z of the wall).
-    cutter = bmesh.ops.create_cube(bm, size=1.0)
-    bmesh.ops.scale(bm, verts=cutter["verts"], vec=(door_w, thickness * 3.0, door_h))
-    bmesh.ops.translate(bm, verts=cutter["verts"], vec=(0.0, 0.0, -HEIGHT_M / 2.0 + door_h / 2.0))
-
-    wall_faces = [f for f in bm.faces if f not in set(cutter["faces"])]
-    bmesh.ops.boolean(bm, geom=wall_faces + cutter["faces"], operation="DIFFERENCE")
+    verts = [bm.verts.new((x, -half_t, z)) for x, z in profile]
+    face = bm.faces.new(verts)
+    ext = bmesh.ops.extrude_face_region(bm, geom=[face])
+    ext_verts = [el for el in ext["geom"] if isinstance(el, bmesh.types.BMVert)]
+    bmesh.ops.translate(bm, verts=ext_verts, vec=(0.0, thickness, 0.0))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
 
     bevel = params["frame_bevel"]
     if bevel > 1e-6:
-        frame_edges = [
-            e for e in bm.edges
-            if e.is_boundary and 0.0 < e.calc_length() < max(door_w, door_h) * 1.5
-        ]
+        eps = 1e-5
+
+        def on_frame(v) -> bool:
+            return (abs(abs(v.co.x) - half_dw) < eps and v.co.z <= door_h + eps) \
+                or (abs(v.co.z - door_h) < eps and abs(v.co.x) <= half_dw + eps)
+
+        frame_edges = [e for e in bm.edges if all(on_frame(v) for v in e.verts)]
         if frame_edges:
             bmesh.ops.bevel(bm, geom=frame_edges, offset=bevel, segments=2, profile=0.7,
                              affect="EDGES")

@@ -95,7 +95,9 @@ def reunwrap_margin(ctx: dict, action: dict) -> dict:
     bpy.context.view_layer.objects.active = obj
     bpy.ops.object.mode_set(mode='EDIT')
     bpy.ops.mesh.select_all(action='SELECT')
-    bpy.ops.uv.smart_project(angle_limit=math.radians(66), island_margin=margin)
+    # 35 deg for the same reason as generators/common.smart_uv_project: at 66
+    # bevel-corner fans fold within one chart (the very S12b this fix targets).
+    bpy.ops.uv.smart_project(angle_limit=math.radians(35), island_margin=margin)
     bpy.ops.uv.pack_islands(margin=margin)
     bpy.ops.object.mode_set(mode='OBJECT')
     return {"fix_id": "reunwrap_margin", "object": obj.name, "island_margin": margin}

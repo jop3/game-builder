@@ -61,11 +61,14 @@ def generate(params: dict, rng, theme: dict):
                                  radius1=width * 0.45, radius2=0.0, depth=cap_h)
     bmesh.ops.translate(bm, verts=cap["verts"], vec=(0.0, 0.0, base_h + cage_h + cap_h / 2.0))
 
-    # Top ring handle: thin torus-like loop approximated by a small
-    # radius cone-cap ring (kept bmesh-only, no bpy.ops.mesh.primitive calls).
-    ring = bmesh.ops.create_circle(bm, cap_ends=False, segments=12, radius=width * 0.12)
-    bmesh.ops.translate(bm, verts=ring["verts"],
-                         vec=(0.0, 0.0, base_h + cage_h + cap_h + width * 0.12))
+    # Top finial knob (solid, capped): a wire circle here (the earlier
+    # "ring handle") is non-manifold by construction -- faceless edges fail
+    # S1/S4 on every run (verified against real Blender 4.2).
+    knob = bmesh.ops.create_cone(bm, cap_ends=True, cap_tris=True, segments=8,
+                                  radius1=width * 0.1, radius2=width * 0.04,
+                                  depth=width * 0.12)
+    bmesh.ops.translate(bm, verts=knob["verts"],
+                         vec=(0.0, 0.0, base_h + cage_h + cap_h + width * 0.06))
 
     # rng jitter: slight per-cage-bar height wobble on the topmost cage ring
     # so the cage does not read as a perfect array-modifier repeat.

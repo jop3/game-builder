@@ -36,10 +36,12 @@ def _place_edge_sockets(root_obj, thickness):
     ):
         for i in range(n + 1):
             coord = -WIDTH_M / 2.0 + i * GRID
+            # z=0 (the tile's base/snapping plane): a thickness-derived z is
+            # off the 0.5 m grid for any non-grid thickness (S10).
             if axis_fixed == "y":
-                loc = (coord, sign * DEPTH_M / 2.0, thickness)
+                loc = (coord, sign * DEPTH_M / 2.0, 0.0)
             else:
-                loc = (sign * WIDTH_M / 2.0, coord, thickness)
+                loc = (sign * WIDTH_M / 2.0, coord, 0.0)
             common.add_socket(root_obj, f"SOCKET_{label}_{i}", loc)
 
 

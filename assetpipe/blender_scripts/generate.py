@@ -46,9 +46,10 @@ from assetpipe.generators import registry as gen_registry
 
 EXPORT_COLLECTION_NAME = "EXPORT"
 FINISHING_REMOVE_DOUBLES_DIST = 1e-5
-UV_ISLAND_MARGIN_TEXELS = 4.0
+UV_ISLAND_MARGIN_TEXELS = 8.0   # 2x the S12e 4-texel floor; Blender's margin is nominal
 DECIMATE_STEP_RATIO = 0.85
 DECIMATE_MAX_STEPS = 5
+SUBDIVIDE_MAX_STEPS = 4   # x4 tris per step; 4 steps spans any spec 8.1 minimum
 DEFAULT_TILING_TEXEL_DENSITY_PX_PER_M = 256.0
 
 
@@ -163,6 +164,20 @@ def run_finishing_pass(obj: "bpy.types.Object", budget_max: int, budget_min: int
         apply_all_modifiers(obj)
         tris = triangle_count(obj)
         steps += 1
+
+    # Category minimum (spec 8.1 / S7): honest low-poly recipes (a 12-tri
+    # floor tile, a 28-tri wall) legitimately land under the profile minimum;
+    # simple (non-smoothing) subdivision preserves the silhouette exactly
+    # while quadrupling density until the floor is met.
+    steps = 0
+    while tris < budget_min and steps < SUBDIVIDE_MAX_STEPS:
+        mod = obj.modifiers.new(f"BudgetSubdivide{steps}", 'SUBSURF')
+        mod.subdivision_type = 'SIMPLE'
+        mod.levels = 1
+        mod.render_levels = 1
+        apply_all_modifiers(obj)
+        tris = triangle_count(obj)
+        steps += 1
     return tris
 
 
@@ -189,7 +204,9 @@ def smart_uv_project(obj: "bpy.types.Object", island_margin: float) -> None:
     bpy.context.view_layer.objects.active = obj
     bpy.ops.object.mode_set(mode='EDIT')
     bpy.ops.mesh.select_all(action='SELECT')
-    bpy.ops.uv.smart_project(angle_limit=math.radians(66), island_margin=island_margin)
+    # 35 deg: see generators/common.smart_uv_project -- 66 deg folds
+    # bevel-corner fans into overlapping charts (S12b).
+    bpy.ops.uv.smart_project(angle_limit=math.radians(35), island_margin=island_margin)
     bpy.ops.object.mode_set(mode='OBJECT')
 
 

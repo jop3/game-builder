@@ -67,7 +67,13 @@ def generate(params: dict, rng, theme: dict):
 
     # Greebles: rng-scattered inset+push bumps on side faces, count driven
     # by greeble_density.
-    side_faces = [f for f in bm.faces if abs(f.normal.z) < 0.2 and f.calc_area() > 1e-6]
+    # Greeble candidates: real panel faces only. Chamfer bands and panel-line
+    # groove walls are millimeter-wide slivers; insetting them produces
+    # micro-geometry that folds in the UV charts (the residual S12b overlap
+    # observed on real Blender 4.2 traced back to these).
+    min_greeble_area = (min(width, height) * 0.12) ** 2
+    side_faces = [f for f in bm.faces
+                  if abs(f.normal.z) < 0.2 and f.calc_area() > min_greeble_area]
     side_faces.sort(key=lambda f: tuple(round(c, 6) for c in f.calc_center_median()))
     rng.shuffle(side_faces)
     n_greebles = int(round(len(side_faces) * params["greeble_density"] * 0.5))
