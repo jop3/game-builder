@@ -24,11 +24,11 @@ iteration dir) and may need small key-name reconciliation once they land --
 this module's own test suite (``test_stages.py``) drives a fake ``blender``
 executable so it does not depend on that reconciliation to stay green.
 
-One further seam worth flagging: ``bake.py``'s ``main()`` writes its
-``result.json`` to the *same* ``out_dir`` that ``generate.py`` just wrote its
-own ``result.json`` to, clobbering it. This module works around that by
-reading ``result.json`` for the fields it needs (notably ``root_object``)
-immediately after ``generate.py`` returns, before ``bake.py`` runs.
+(The payload shapes have since been reconciled: ``render_views.py`` and
+``fixes.py`` accept this module's keys, ``bake.py`` takes the bare theme
+material id + ``theme_id`` this module sends, and ``bake.py`` writes
+``bake_result.json`` so ``generate.py``'s ``result.json`` survives for the
+downstream stages that read it.)
 """
 from __future__ import annotations
 
@@ -260,6 +260,7 @@ class SubprocessStages:
         material_recipe = self._material_recipe()
         self._run_blender("bake.py", iter_dir,
                           {"object_name": root_object, "material_recipe": material_recipe,
+                           "theme_id": self.request.get("theme"),
                            "material_params": self.request.get("material_overrides", {}),
                            "palette": self.theme.get("palette", {}), "seed": seed,
                            "asset_dir": str(iter_dir), "out_dir": str(iter_dir),
@@ -324,6 +325,7 @@ class SubprocessStages:
             material_recipe = self._material_recipe()
             self._run_blender("bake.py", iter_dir,
                               {"object_name": root_object, "material_recipe": material_recipe,
+                               "theme_id": self.request.get("theme"),
                                "material_params": self.request.get("material_overrides", {}),
                                "palette": self.theme.get("palette", {}),
                                "seed": self.request["seed"], "asset_dir": str(iter_dir),

@@ -306,17 +306,22 @@ def render_tiling_views(scene, out_dir: Path, assign_material_fn) -> list[str]:
 
 def main() -> None:
     payload = common.parse_args()
-    glb_path = Path(payload["glb"])
+    # The orchestrator's payload nests the request and names the glb
+    # "glb_path"; standalone/manual invocations may pass flat keys.
+    request = payload.get("request", {})
+    glb_path = Path(payload.get("glb") or payload["glb_path"])
     out_dir = Path(payload["out_dir"])
     out_dir.mkdir(parents=True, exist_ok=True)
-    category = payload.get("category", "prop_small")
+    category = payload.get("category") or request.get("category", "prop_small")
 
     clear_scene()
     scene = bpy.context.scene
     setup_render_settings(scene)
 
     if category == "skybox":
-        rendered = render_skybox_views(scene, out_dir, Path(payload["exr"]))
+        # skybox assets deliver an .exr instead of a .glb; tolerate either key
+        exr = payload.get("exr") or payload.get("glb") or payload.get("glb_path")
+        rendered = render_skybox_views(scene, out_dir, Path(exr))
     else:
         import_glb(glb_path)
         if category == "tiling_texture_set":

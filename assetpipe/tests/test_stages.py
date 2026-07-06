@@ -154,7 +154,7 @@ def main():
         make_noisy_png(maps_dir / "albedo.png", (120, 120, 120), seed=1)
         make_flat_png(maps_dir / "normal.png", (128, 128, 255))
         make_flat_png(maps_dir / "orm.png", (255, 128, 0))
-        write_json(Path(payload["out_dir"]) / "result.json", {"maps": {
+        write_json(Path(payload["out_dir"]) / "bake_result.json", {"maps": {
             "albedo": str(maps_dir / "albedo.png"), "normal": str(maps_dir / "normal.png"),
             "orm": str(maps_dir / "orm.png")}})
     elif script == "export_gltf.py":

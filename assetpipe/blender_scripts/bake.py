@@ -63,10 +63,26 @@ def new_material(name: str) -> "bpy.types.Material":
     return mat
 
 
-def load_material_recipe(dotted_path: str):
-    """``dotted_path`` e.g. ``"themes.scifi_industrial.materials.scifi_hull_metal"``
-    (spec 10.2's recipe module contract)."""
-    return importlib.import_module(dotted_path)
+def load_material_recipe(recipe_id: str, theme_id: str | None = None):
+    """Load a material recipe module (spec 10.2's recipe module contract).
+
+    Two accepted forms:
+    - bare recipe id (e.g. ``"scifi_hull_metal"``) + ``theme_id`` -- resolved
+      through :func:`assetpipe.themes_io.load_material_recipe` against the
+      repo ``themes/`` root (theme material modules are plain files, not an
+      importable package, so this is the canonical path; it is what the
+      orchestrator's bake payload sends);
+    - a dotted module path (contains ``.``) -- imported directly, for ad-hoc /
+      test recipes that do live on ``sys.path``.
+    """
+    if "." in recipe_id:
+        return importlib.import_module(recipe_id)
+    if not theme_id:
+        raise RuntimeError(f"bare material recipe id {recipe_id!r} requires a "
+                           "'theme_id' in the bake payload")
+    from assetpipe.themes_io import load_material_recipe as _load
+    themes_root = Path(__file__).resolve().parent.parent.parent / "themes"
+    return _load(themes_root, theme_id, recipe_id)
 
 
 def get_periodic_coords_group():
@@ -268,7 +284,7 @@ def bake_all_maps(ctx: dict, resolution_override: int | None = None, tiling: boo
     ``texture_resolution``. Used by both this module's ``main()`` and by the
     rebake-family fix functions in ``fixes.py``."""
     obj = bpy.data.objects[ctx["object_name"]]
-    recipe = load_material_recipe(ctx["material_recipe"])
+    recipe = load_material_recipe(ctx["material_recipe"], ctx.get("theme_id"))
     rng = common.seeded_random(int(ctx.get("seed", 0)))
     resolution = resolution_override or ctx.get("texture_resolution", 1024)
 
@@ -300,7 +316,10 @@ def bake_all_maps(ctx: dict, resolution_override: int | None = None, tiling: boo
 def main() -> None:
     payload = common.parse_args()
     result = bake_all_maps(payload, tiling=payload.get("tiling", False))
-    common.write_result(Path(payload["out_dir"]) / "result.json", result)
+    # bake_result.json, NOT result.json: generate.py already wrote result.json
+    # (root_object etc.) into the same iteration dir, and downstream stages
+    # (static checks, export) still read it after the bake.
+    common.write_result(Path(payload["out_dir"]) / "bake_result.json", result)
 
 
 if __name__ == "__main__":

@@ -354,11 +354,16 @@ def main() -> None:
     actions = payload.get("actions", [])
     results = apply_actions(payload, actions)
 
-    blend_path = payload.get("blend_path")
+    # The orchestrator opens the iteration's .blend as Blender's file argument
+    # and does not repeat it in the payload; save back to wherever we loaded
+    # from unless an explicit path is given.
+    blend_path = payload.get("blend_path") or bpy.data.filepath
     if blend_path:
         bpy.ops.wm.save_as_mainfile(filepath=str(blend_path))
 
-    common.write_result(payload["out_path"], {"stage": "fix", "results": results})
+    out_path = payload.get("out_path") or (
+        Path(payload["asset_dir"]) / "fixes_result.json")
+    common.write_result(out_path, {"stage": "fix", "results": results})
 
 
 if __name__ == "__main__":

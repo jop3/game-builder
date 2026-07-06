@@ -1,71 +1,78 @@
-# assetpipe — implemented core
+# assetpipe — implementation
 
-This package contains the **judgment-critical core** of the pipeline specified in
-`docs/specs/asset-pipeline.md`, implemented and tested first because these are the
-pieces where subtle mistakes are hardest to notice later: the cross-consistent
-contracts, the vision-inspection semantics, the repair-loop state machine, and the
-objective pixel/GLB checks. Everything here runs and is covered by
-`assetpipe/tests/` (pure Python — no Blender, Godot, or API access needed):
+This package implements the pipeline specified in `docs/specs/asset-pipeline.md`.
+All components are built; everything that can run without the pinned external
+toolchain (Blender 4.2, Godot 4.3, the Khronos glTF validator, the Anthropic
+API) is covered by the pure-Python test suite:
 
 ```
-python3 -m pytest assetpipe/tests    # 55 tests
+python3 -m pytest assetpipe/tests    # 415 tests, no Blender/Godot/network
 ```
 
-## What is implemented (do not re-design; extend)
+## Module map
 
 | Module | Spec | What it does |
 |---|---|---|
 | `schemas/defects.json` | App. B | Closed defect taxonomy: definition, severity, table fix, resume stage |
 | `schemas/rubric.json` | §15.2 | The 12 vision checks: views, criteria text, allowed defects, two-view rule |
-| `schemas/fixes.json` | §16.2 | Deterministic defect→fix table (implementations dotted-path stubs) |
+| `schemas/fixes.json` | §16.2 | Deterministic defect→fix table (implementation dotted paths) |
 | `schemas/*.schema.json` | §6, §16.3 | AssetRequest and FixPlan JSON Schemas (draft 2020-12) |
-| `profiles/*.json` | §8 | The four platform budget profiles (triangles, textures, file size, LODs) |
-| `contracts.py` | §2, App. B | Loader + **cross-consistency gate**: taxonomy/rubric/fixes cannot drift; generates the vision tool schema from the data files |
-| `vision/prompts.py` | §15.1, App. A | Inspection + uncertainty-recheck prompt builders (criteria rendered from rubric.json, never paraphrased) |
-| `vision/report.py` | §15.3–15.6 | Report semantic validation, two-view-rule enforcement, uncertain→fail-safe policy, verdict aggregation |
-| `fixes/planner.py` | §16.1–16.4 | Table-fix planning, escalation ladder, full-regen window/budget, LLM patch clamping (`clamp_patch`) |
-| `loop.py` | §4.2, §16.5–16.6 | Per-asset state machine with all five stopping conditions and best-iteration selection |
-| `validation/image_checks.py` | §14.5, §13.3–13.4 | A1–A4 + S16/S17/S19 pixel analytics (S19 uses relative gradient ratios — see the spec's corrected §13.4 rationale) |
-| `validation/glb.py` | §13.5 | Dependency-free GLB parsing + S20b–S20d structural checks |
-| `config/defaults.yaml` | §20.3 | All thresholds/config defaults |
+| `profiles/*.json` | §8 | The four platform budget profiles |
+| `contracts.py` | §2, App. B | Loader + cross-consistency gate; generates the vision tool schema |
+| `intake.py` | §6 | Fail-fast request validation; zero iterations consumed on rejection |
+| `generators/` | §9 | Registry + keyword resolution and the 9 minimum recipes (bpy only inside `generate()`) |
+| `matlib/` | §10.2 | Shared shader node-group builders + bpy-free palette sampling (§10.5) |
+| `themes_io.py`, `themes/` (→ `../themes`) | §7 | Four theme packs (17 material recipes) + loader/validator |
+| `blender_scripts/` | §9–§14, §16.2 | In-Blender stage scripts: generate, bake, export (normative §12.1 kwargs), mesh checks S1–S12e, render harness, all table fixes. bpy-free parts (view table, framing math, args, contact sheets, param resolution) are unit-tested |
+| `validation/` | §13, §14.5 | Pixel analytics (A1–A4, S16–S19), GLB structural checks (S20b–d), and `static_gate.py` assembling the orchestrator-side V1 |
+| `vision/` | §15, App. A | Prompt builders, report semantics, and `inspector.py` — the forced-tool-use Anthropic caller with corrective retry, uncertain crop re-query, and backoff→`InfraError` |
+| `fixes/` | §16 | Planner + escalation ladder, applicator (`apply.py`), pure-Python param/map fixes |
+| `loop.py` | §4.2, §16.5–16.6 | Per-asset state machine with all five stopping conditions |
+| `stages/` | §4.3 | `SubprocessStages`: Blender subprocess spawning (timeout, retry-once, `InfraError`), §9.3 param resolution, fix resume semantics, pre-vision A-checks |
+| `rundir.py`, `pipeline_config.py` | §17, §3, §20.3 | Run-dir layout, append-only `history.jsonl`, single-writer manifest; config merge + toolchain gate |
+| `orchestrator.py` | §16.5, §17, §20 | `run_batch` / `resume_run`: intake → parallel per-asset loops → final/ + manifest + diagnosis |
+| `diagnosis.py` | §16.6 | Machine-written `diagnosis.md` for best-effort assets |
+| `adapters/` | §18–§19 | `EngineAdapter` protocol + Godot adapter (deliver/verify, bundled `.gd` scripts) |
+| `cli.py` (`python -m assetpipe`) | §20.2 | generate, batch, validate, render, inspect, deliver, resume, report |
 
-## What is deliberately left (in rough build order, spec §23)
+## Running it
 
-These are well-specified by the spec plus the four original skills in
-`.claude/skills/` (`blender-procedural-geometry`, `pbr-material-baking`,
-`asset-visual-qa`, `godot-asset-import`) and are mechanical to build against the
-contracts above:
+```
+python -m assetpipe batch    --requests batch.json --out runs/
+python -m assetpipe generate --request one.json --max-iterations 5
+python -m assetpipe report   --run runs/<run_id> [--verbose]
+python -m assetpipe deliver  --run runs/<run_id> --adapter godot --project /path/to/godot_proj
+```
 
-1. `intake.py` — request validation against `asset_request.schema.json` + theme/profile
-   existence (spec §6).
-2. `orchestrator.py` + `stages/` — subprocess wrappers implementing the `Stages`
-   protocol in `loop.py` (spawn `blender --background --python ... -- --args-json`,
-   timeouts, one retry, raise `loop.InfraError` after retry; spec §4.3). The run-dir
-   layout and `history.jsonl` events are specified in §17; `loop.py` already emits
-   the event stream to persist.
-3. `blender_scripts/` — generate/bake/export/render scripts and the fix
-   implementations referenced by `schemas/fixes.json` (`implementation` dotted paths).
-   The skills contain the exact bpy/bmesh/bake patterns to use.
-4. `vision/inspector.py` — the Anthropic API caller: build prompt via
-   `vision/prompts.py`, force the tool from `contracts.report_tool_schema(category)`,
-   validate via `vision/report.validate_report`, run the single re-query round, and
-   return a `loop.StageResult` (call shape in the `asset-visual-qa` skill).
-5. `fixes/apply.py` — action applicator: table fixes dispatch to the dotted paths;
-   `llm_param_patch` makes the text-only model call and sanitizes it with
-   `planner.clamp_patch` before writing `params.json`.
-6. `generators/`, `matlib/`, `themes/` — recipes (spec §9.2 minimum set, §10.2).
-7. `adapters/godot/` — per the `godot-asset-import` skill and spec §19.
-8. `cli.py` — the §20.2 commands.
-9. Diagnosis writer (spec §16.6): render `diagnosis.md` from `LoopResult.events` +
-   iteration records; one text-only model call for the final hypothesis line.
+Requires on PATH (or via `--blender-bin` / `--godot-bin`): Blender 4.2 LTS,
+Godot 4.3+, and `ANTHROPIC_API_KEY` (or an `ant auth login` profile) for the
+vision stage. The §3 toolchain gate hard-fails a run on version mismatch
+unless `toolchain.require_exact: false`.
+
+## Test tiers (spec §21) — what runs where
+
+- **Runs in CI here (pure Python):** validator truth tests on synthetic
+  fixtures, contract cross-consistency, fix-loop unit tests, the vision
+  harness against fake clients, the orchestrator end-to-end against a fake
+  `blender` executable, and the Godot adapter against a fake `godot` binary.
+- **Needs the real toolchain (not runnable in this container):** golden
+  generation tests (§21.2), real-Blender bake/render smoke tests, real-Godot
+  import verification, and the nightly real-API vision regression (§21.3).
+  The highest-risk unverified seam is glTF occlusion-texture wiring in
+  `blender_scripts/export_gltf.py` (documented in-code) — smoke-test that
+  first when Blender is available.
 
 ## Invariants to preserve
 
-- **Never hand-write what `contracts.py` generates.** The vision tool schema, prompt
-  taxonomy list, and check applicability all derive from the three JSON data files;
-  `Contracts.load()` raises on any inconsistency — keep it that way.
-- **The loop owns stopping.** Stage code must not decide to retry iterations or give
-  up; it either succeeds, returns findings, or raises `InfraError`.
+- **Never hand-write what `contracts.py` generates.** The vision tool schema,
+  prompt taxonomy list, and check applicability all derive from the three JSON
+  data files; `Contracts.load()` raises on any inconsistency — keep it that way.
+- **The loop owns stopping.** Stage code must not decide to retry iterations or
+  give up; it either succeeds, returns findings, or raises `InfraError`.
 - **Thresholds live in `config/defaults.yaml`**, not in code.
-- Adding a defect type = edit `defects.json` (+ optionally `fixes.json`); prompts,
-  schemas, and planner pick it up automatically. Same for rubric changes.
+- Adding a defect type = edit `defects.json` (+ optionally `fixes.json`);
+  prompts, schemas, and planner pick it up automatically. Same for rubric
+  changes; adding a theme = a new `themes/<id>/` directory; adding a generator
+  = a new recipe module (the registry discovers it).
+- Recipes/material modules import `bpy` only inside function bodies so every
+  module stays importable (and registry-discoverable) without Blender.
