@@ -187,7 +187,15 @@ def _silhouette_material() -> "bpy.types.Material":
 
 def _normals_material() -> "bpy.types.Material":
     """Debug override (spec 14.2): surface normal as RGB; ``Backfacing`` ->
-    pure red emission."""
+    pure red emission.
+
+    The normal is remapped ``0.5*n + 0.5`` before display (documented
+    deviation from the spec's bare "normal->RGB"): with raw normals a
+    legitimate +X-facing surface emits (1,0,0) -- byte-identical to the
+    backface marker -- so A2's pure-red pixel count and vision R3 would
+    false-positive on every +X face. After the remap, +X renders
+    (1,0.5,0.5) and pure red can only mean backfacing (found by the first
+    real vision-tier verification, 2026-07)."""
     mat = bpy.data.materials.new("DBG_normals")
     mat.use_nodes = True
     nt = mat.node_tree
@@ -196,8 +204,13 @@ def _normals_material() -> "bpy.types.Material":
     geo = nt.nodes.new('ShaderNodeNewGeometry')
     red = nt.nodes.new('ShaderNodeEmission')
     red.inputs['Color'].default_value = (1, 0, 0, 1)
+    remap = nt.nodes.new('ShaderNodeVectorMath')
+    remap.operation = 'MULTIPLY_ADD'
+    remap.inputs[1].default_value = (0.5, 0.5, 0.5)
+    remap.inputs[2].default_value = (0.5, 0.5, 0.5)
+    nt.links.new(geo.outputs['Normal'], remap.inputs[0])
     nrm = nt.nodes.new('ShaderNodeEmission')
-    nt.links.new(geo.outputs['Normal'], nrm.inputs['Color'])
+    nt.links.new(remap.outputs['Vector'], nrm.inputs['Color'])
     mix = nt.nodes.new('ShaderNodeMixShader')
     nt.links.new(geo.outputs['Backfacing'], mix.inputs['Fac'])
     nt.links.new(nrm.outputs['Emission'], mix.inputs[1])
@@ -250,15 +263,39 @@ def render_view(scene, cam_obj, bbox_min: Vector, bbox_max: Vector, view: dict, 
 
 
 def render_mesh_views(scene, category: str, out_dir: Path) -> list[str]:
-    add_ground_plane()
-    add_reference_cube()
+    # The framing bbox is the ASSET's alone (spec 14.1: asset fills 55-75% of
+    # frame height), so capture the object list BEFORE the scene furniture is
+    # added -- framing over all objects lets the 20 m ground plane dominate
+    # and the asset renders at ~0.1% of the frame (found by the first real
+    # vision-tier verification, 2026-07).
+    asset_objects = list(bpy.data.objects)
+    ground = add_ground_plane()
+    ref_cube = add_reference_cube()
     cam_obj = setup_camera()
-    bbox_min, bbox_max = compute_bbox(list(bpy.data.objects))
+    bbox_min, bbox_max = compute_bbox(asset_objects)
+    ref_min, ref_max = compute_bbox([ref_cube])
+    # R6 (scale plausibility) is judged against the reference cube in
+    # turn_000/turn_090 (spec 14.2), so those two views widen the framing to
+    # the asset+cube union -- otherwise a small asset framed at spec fill
+    # leaves the cube out of frame entirely. Documented deviation from the
+    # flat 55-75% fill for exactly these two views.
+    union_min = Vector(min(bbox_min[i], ref_min[i]) for i in range(3))
+    union_max = Vector(max(bbox_max[i], ref_max[i]) for i in range(3))
 
     rendered = []
     for view in views.view_set_for_category(category):
-        render_view(scene, cam_obj, bbox_min, bbox_max, view, out_dir / f"{view['view_id']}.png")
+        wide = view["view_id"] in ("turn_000", "turn_090")
+        fmin, fmax = (union_min, union_max) if wide else (bbox_min, bbox_max)
+        # Silhouette views are "emission-white ASSET on black" (spec 14.2):
+        # the furniture must not render or the plane fills the silhouette
+        # and A3 measures the plane instead of the asset.
+        hide_furniture = view.get("debug_material") == "silhouette"
+        ground.hide_render = hide_furniture
+        ref_cube.hide_render = hide_furniture
+        render_view(scene, cam_obj, fmin, fmax, view, out_dir / f"{view['view_id']}.png")
         rendered.append(view["view_id"])
+    ground.hide_render = False
+    ref_cube.hide_render = False
     return rendered
 
 
