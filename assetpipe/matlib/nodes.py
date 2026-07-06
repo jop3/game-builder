@@ -196,8 +196,15 @@ def edge_wear(name: str = "AP_EdgeWear"):
 
 def panel_lines(name: str = "AP_PanelLines"):
     """Brick-pattern grooves (spec 10.2): mortar mask darkens albedo and
-    feeds a Bump for the normal pass. Scale is snapped to whole rows/columns
-    by the caller so the pattern tiles cleanly if used on a tiling surface.
+    feeds a Bump for the normal pass.
+
+    Verified against real Blender 4.2: the Brick Texture's mask output is
+    ``Fac`` (1 in the mortar) -- there is no "Mortar" socket -- and ``Rows``
+    is wired to the texture ``Scale`` (a count per UV unit), NOT to "Row
+    Height" (a size, which would invert the semantics). A brick grid is a
+    discrete lookup, not a continuous field, so unlike the noise groups it
+    must NOT be routed through PeriodicCoords: feed it raw UV and keep Rows
+    integer -- an integer-scale grid over the 0-1 tile is exactly seamless.
     """
     import bpy
 
@@ -215,11 +222,12 @@ def panel_lines(name: str = "AP_PanelLines"):
     nt.interface.items_tree["Mortar Width"].default_value = 0.02
 
     brick = nt.nodes.new("ShaderNodeTexBrick")
+    brick.offset = 0.0  # row offset breaks vertical tiling; a panel grid has none
     nt.links.new(group_in.outputs["Vector"], brick.inputs["Vector"])
-    nt.links.new(group_in.outputs["Rows"], brick.inputs["Row Height"])
+    nt.links.new(group_in.outputs["Rows"], brick.inputs["Scale"])
     nt.links.new(group_in.outputs["Mortar Width"], brick.inputs["Mortar Size"])
 
-    nt.links.new(brick.outputs["Mortar"], group_out.inputs["Fac"])
+    nt.links.new(brick.outputs["Fac"], group_out.inputs["Fac"])
     return nt
 
 

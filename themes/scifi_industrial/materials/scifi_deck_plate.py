@@ -35,10 +35,13 @@ def build(nt, params: dict, rng, palette_dict: dict) -> None:
     periodic.node_tree = nodes.periodic_coords()
     nt.links.new(tex_coord.outputs["UV"], periodic.inputs["UV"])
 
+    # The panel grid takes RAW UV, not the periodic domain: a brick grid is a
+    # discrete lookup (torus coords would warp it), and integer Rows over the
+    # 0-1 tile is exactly seamless by construction (matlib.panel_lines note).
     panels = nt.nodes.new("ShaderNodeGroup")
     panels.node_tree = nodes.panel_lines()
-    nt.links.new(periodic.outputs["Vector"], panels.inputs["Vector"])
-    panels.inputs["Rows"].default_value = params["grid_rows"]
+    nt.links.new(tex_coord.outputs["UV"], panels.inputs["Vector"])
+    panels.inputs["Rows"].default_value = float(max(1, round(params["grid_rows"])))
 
     metal = nt.nodes.new("ShaderNodeGroup")
     metal.node_tree = nodes.metal_base()

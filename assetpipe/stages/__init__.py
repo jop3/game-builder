@@ -186,15 +186,36 @@ class SubprocessStages:
         """Material recipe id for the bake payload. theme.json's ``materials``
         is a *list* of recipe ids legal for the theme (spec 7); generators may
         pick per-slot materials themselves, so the stage-level default is the
-        list's first entry unless the request overrides it."""
+        list's first entry unless the request overrides it. Tiling requests
+        need a TILING-capable recipe (spec 10.2), so for them the default is
+        the theme's first recipe declaring ``TILING = True`` -- the list's
+        first entry is usually a mesh material whose bake cannot be seamless."""
         override = self.request.get("material_recipe")
         if override:
             return override
         materials = self.theme.get("materials")
         if isinstance(materials, dict):  # tolerated legacy/test shape
             return materials.get(self.request["category"])
-        if isinstance(materials, list) and materials:
-            return materials[0]
+        if not (isinstance(materials, list) and materials):
+            return None
+        if self.request["category"] == "tiling_texture_set":
+            tiling_id = self._first_tiling_material(materials)
+            if tiling_id is not None:
+                return tiling_id
+        return materials[0]
+
+    def _first_tiling_material(self, materials: list) -> str | None:
+        from assetpipe.themes_io import ThemeIOError, load_material_recipe
+        themes_root = self.config.get("themes_root") or \
+            Path(__file__).resolve().parent.parent.parent / "themes"
+        for material_id in materials:
+            try:
+                module = load_material_recipe(themes_root, self.request.get("theme"),
+                                              material_id)
+            except ThemeIOError:
+                continue
+            if getattr(module, "TILING", False):
+                return material_id
         return None
 
     def _run_blender(self, script_name: str, iter_dir: Path, payload: dict, log_stem: str,

@@ -96,18 +96,24 @@ def load_material_recipe(recipe_id: str, theme_id: str | None = None):
     return _load(themes_root, theme_id, recipe_id)
 
 
+_PERIODIC_GROUP_NAMES = ("AP_PeriodicCoords", "PeriodicCoords")
+# matlib names its groups AP_* (assetpipe.matlib.nodes.periodic_coords creates
+# "AP_PeriodicCoords"); "PeriodicCoords" is accepted for ad-hoc/test recipes.
+
+
 def get_periodic_coords_group():
-    """Look up the ``PeriodicCoords`` node group by name (spec 10.3; provided
-    by ``assetpipe/matlib`` -- see module docstring). Raises a clear error if
-    a tiling bake is attempted before matlib ships it, rather than silently
-    baking non-periodic noise."""
-    group = bpy.data.node_groups.get("PeriodicCoords")
-    if group is None:
-        raise RuntimeError(
-            "tiling bake requested but the 'PeriodicCoords' node group is not "
-            "present in this .blend -- it must be appended from assetpipe/matlib "
-            "before baking any tiling_texture_set material (spec 10.3)")
-    return group
+    """Look up the periodic-domain node group by name (spec 10.3; provided by
+    ``assetpipe/matlib``). Raises a clear error if a tiling bake is attempted
+    without it, rather than silently baking non-periodic noise."""
+    for name in _PERIODIC_GROUP_NAMES:
+        group = bpy.data.node_groups.get(name)
+        if group is not None:
+            return group
+    raise RuntimeError(
+        "tiling bake requested but no periodic-coordinate node group "
+        f"({' / '.join(_PERIODIC_GROUP_NAMES)}) is present -- TILING material "
+        "recipes must route every pattern input through "
+        "matlib.nodes.periodic_coords() (spec 10.3)")
 
 
 def snap_periodic_scale_to_integer(mat: "bpy.types.Material") -> None:
@@ -117,7 +123,8 @@ def snap_periodic_scale_to_integer(mat: "bpy.types.Material") -> None:
     the classic cause of a visible seam in periodic-noise tiling)."""
     nt = mat.node_tree
     for node in nt.nodes:
-        if node.type == 'GROUP' and node.node_tree and node.node_tree.name == "PeriodicCoords":
+        if node.type == 'GROUP' and node.node_tree \
+                and node.node_tree.name in _PERIODIC_GROUP_NAMES:
             sock = node.inputs.get("period_scale")
             if sock is not None:
                 sock.default_value = max(1, round(sock.default_value))
@@ -376,6 +383,16 @@ def bake_all_maps(ctx: dict, resolution_override: int | None = None, tiling: boo
                                    ctx.get("theme") or {},
                                    ctx.get("material_params") or {}, rng)
     recipe.build(mat.node_tree, params, rng, ctx.get("palette", {}))
+
+    if tiling:
+        if not getattr(recipe, "TILING", False):
+            raise RuntimeError(
+                f"tiling bake requested but material recipe "
+                f"{ctx['material_recipe']!r} does not declare TILING = True "
+                f"(spec 10.2) -- its bake cannot be seamless")
+        # The recipe must actually route through the periodic domain: raises
+        # if no periodic-coordinate group exists in the .blend at all.
+        get_periodic_coords_group()
 
     scene = bpy.context.scene
     setup_bake_settings(scene)

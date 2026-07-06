@@ -240,6 +240,12 @@ def box_project_uvs(obj: "bpy.types.Object", texel_density_px_per_m: float,
 def run_uv_pass(obj: "bpy.types.Object", texture_resolution: int, tiling: bool,
                  texel_density_px_per_m: float = DEFAULT_TILING_TEXEL_DENSITY_PX_PER_M) -> None:
     if tiling:
+        # A recipe-authored UV layer (the tiling/surface unit plane's exact
+        # 0-1 domain) must survive: periodic bakes are only seamless when the
+        # UV domain covers the tile exactly once. Box projection is the
+        # fallback for tiling *surfaces* whose recipes did not author UVs.
+        if obj.data.uv_layers:
+            return
         box_project_uvs(obj, texel_density_px_per_m, texture_resolution)
         return
     island_margin = UV_ISLAND_MARGIN_TEXELS / texture_resolution
