@@ -17,8 +17,11 @@ RENDER SET
 Each contact-sheet cell is labeled with its view_id in the corner. Lighting rigs:
 L1 = neutral studio HDRI; lit_warm_* = warm directional sun; lit_dark_090 = dim blue
 rim light (dark regions there are EXPECTED - judge texture presence by the rim-lit
-edge only). silhouette_* views are white-on-black by design. normals_* views use a
-debug material: surface normal rendered as RGB, backfacing surfaces PURE RED.
+edge only). silhouette_* views are white-on-black by design and show the asset ONLY
+(no ground plane, no reference cube). normals_* views use a debug material: surface
+normal remapped to RGB as 0.5*n+0.5 (mid-tones are normal; expect pastel hues, e.g.
++X renders pinkish (1,0.5,0.5), straight-up renders (0.5,0.5,1)) -- ONLY backfacing
+surfaces render PURE saturated RED (1,0,0).
 uvcheck_045 deliberately shows a checker pattern - it is exempt from texture checks.
 The matte grey cube 1.5 m to the asset's left is a 1 m reference object, not part of
 the asset."""

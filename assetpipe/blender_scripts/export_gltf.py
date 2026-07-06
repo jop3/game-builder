@@ -111,11 +111,20 @@ def _ensure_gltf_settings_group():
 
 
 def assign_export_material(obj: "bpy.types.Object", maps: dict[str, str]) -> None:
+    """Replace ALL slots with the single baked-maps material. Multi-material
+    assets (per-slot bake materials, spec 10.2) are already fully captured in
+    the shared atlas maps; leaving extra slots would export one glTF material
+    per slot, each re-pointing at the same textures. Face material_index
+    values are reset to slot 0 explicitly rather than trusting Blender's
+    out-of-range clamping."""
     mat = build_export_material(f"{obj.name}_export", maps)
-    if obj.data.materials:
-        obj.data.materials[0] = mat
-    else:
-        obj.data.materials.append(mat)
+    obj.data.materials.clear()
+    obj.data.materials.append(mat)
+    if len(obj.data.polygons):
+        import numpy as np
+        obj.data.polygons.foreach_set(
+            "material_index", np.zeros(len(obj.data.polygons), dtype=np.int32))
+        obj.data.update()
 
 
 # ---------------------------------------------------------------------------

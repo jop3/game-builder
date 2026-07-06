@@ -41,7 +41,12 @@ def _load_one_request(path: Path) -> dict:
 
 
 def _config(args) -> dict:
-    return load_config(Path(args.config) if getattr(args, "config", None) else None)
+    cfg = load_config(Path(args.config) if getattr(args, "config", None) else None)
+    if getattr(args, "vision_client", None):
+        cfg["vision"]["client"] = args.vision_client
+    if getattr(args, "vision_exchange", None):
+        cfg["vision"]["agent_exchange_dir"] = args.vision_exchange
+    return cfg
 
 
 # ---------------------------------------------------------------------------
@@ -134,7 +139,7 @@ def cmd_inspect(args) -> int:
     renders_dir = Path(args.renders)
     contact_sheets = sorted(renders_dir.glob("contact_sheet_*.png")) \
         or sorted(renders_dir.glob("*.png"))[:6]
-    result = inspect_asset(_anthropic_client(), request=request, theme=theme,
+    result = inspect_asset(_vision_client_factory(cfg)(), request=request, theme=theme,
                            bbox_range=str(request.get("bbox_range", "unspecified")),
                            contact_sheets=contact_sheets, renders_dir=renders_dir,
                            iteration=0, contracts=contracts, config=cfg,
@@ -225,6 +230,18 @@ def _anthropic_client():
 
 
 def _vision_client_factory(cfg: dict):
+    """API client by default; vision.client: agent swaps in the file-exchange
+    client so a driving agent's own vision does V2 (agent_client docstring)."""
+    vision = cfg.get("vision", {})
+    if vision.get("client", "api") == "agent":
+        from assetpipe.vision.agent_client import AgentVisionClient
+        exchange = vision.get("agent_exchange_dir")
+        if not exchange:
+            raise SystemExit("vision.client=agent requires vision.agent_exchange_dir "
+                             "(CLI: --vision-exchange DIR)")
+        return lambda: AgentVisionClient(
+            Path(exchange), poll_s=float(vision.get("agent_poll_s", 2)),
+            timeout_s=float(vision.get("agent_timeout_s", 1800)))
     return lambda: _anthropic_client()
 
 
@@ -236,6 +253,10 @@ def build_parser() -> argparse.ArgumentParser:
     def common(p):
         p.add_argument("--config", help="pipeline.yaml overriding config/defaults.yaml")
         p.add_argument("--blender-bin", default="blender")
+        p.add_argument("--vision-client", choices=["api", "agent"], default=None,
+                       help="override vision.client (agent = file-exchange V2)")
+        p.add_argument("--vision-exchange", default=None,
+                       help="exchange dir for --vision-client agent")
 
     p = sub.add_parser("generate", help="run one asset request through the full loop")
     common(p)

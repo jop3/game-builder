@@ -12,6 +12,10 @@ vision:
   max_retries: 1              # schema/semantic-validation retries per call
   max_recheck_rounds: 1       # 'uncertain' crop re-queries per iteration (spec 15.5)
   max_concurrent_calls: 4
+  client: "api"               # api | agent (file-exchange; a driving agent's own vision)
+  agent_exchange_dir: null    # required when client: agent (--vision-exchange)
+  agent_poll_s: 2
+  agent_timeout_s: 1800
 
 iteration:
   max_iterations: 5

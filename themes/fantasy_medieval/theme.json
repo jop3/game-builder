@@ -3,18 +3,46 @@
   "theme_id": "fantasy_medieval",
   "display_name": "Fantasy Medieval",
   "palette": {
-    "primary":   ["#5B4636", "#7A5C3E"],
-    "secondary": ["#8C8377", "#A69C8C"],
-    "accent":    ["#B08D2A", "#8A1E1E"],
-    "emissive":  ["#FFD24A", "#FF8C42"],
-    "forbidden": ["#00C2A8"]
+    "primary": [
+      "#5B4636",
+      "#7A5C3E"
+    ],
+    "secondary": [
+      "#8C8377",
+      "#A69C8C"
+    ],
+    "accent": [
+      "#B08D2A",
+      "#8A1E1E"
+    ],
+    "emissive": [
+      "#FFD24A",
+      "#FF8C42"
+    ],
+    "forbidden": [
+      "#00C2A8"
+    ]
   },
   "materials": [
-    "fantasy_stone_wall", "fantasy_aged_wood", "fantasy_iron_trim", "fantasy_cloth_banner"
+    "fantasy_stone_wall",
+    "fantasy_aged_wood",
+    "fantasy_iron_trim",
+    "fantasy_cloth_banner",
+    "fantasy_roof_shingles",
+    "fantasy_window_glow"
   ],
   "silhouette_language": "Rounded timber, rough-hewn stone blocks, hand-forged ironwork; wear reads as age and hand-tooling, not machining. Organic irregularity is welcome; avoid straight machined panel lines or right-angle greebles.",
-  "wear_range": [0.2, 0.7],
-  "detail_density_range": [0.2, 0.6],
+  "wear_range": [
+    0.2,
+    0.7
+  ],
+  "detail_density_range": [
+    0.2,
+    0.6
+  ],
   "vision_style_brief": "Assets should read as hand-built fantasy-medieval construction: warm browns and stone greys, gold or oxblood accents used sparingly for banners/trim, visible tool marks and grain, torch-lit emissive glow rather than sci-fi strip lighting. NOT: polished metal panels, teal/orange sci-fi accents, symmetrical machined detail.",
-  "skybox_defaults": { "recipe": "overcast_village", "sun_elevation_deg": 35 }
+  "skybox_defaults": {
+    "recipe": "overcast_village",
+    "sun_elevation_deg": 35
+  }
 }

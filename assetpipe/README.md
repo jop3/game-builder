@@ -25,7 +25,7 @@ python3 -m pytest assetpipe/tests    # 415 tests, no Blender/Godot/network
 | `themes_io.py`, `themes/` (→ `../themes`) | §7 | Four theme packs (17 material recipes) + loader/validator |
 | `blender_scripts/` | §9–§14, §16.2 | In-Blender stage scripts: generate, bake, export (normative §12.1 kwargs), mesh checks S1–S12e, render harness, all table fixes. bpy-free parts (view table, framing math, args, contact sheets, param resolution) are unit-tested |
 | `validation/` | §13, §14.5 | Pixel analytics (A1–A4, S16–S19), GLB structural checks (S20b–d), and `static_gate.py` assembling the orchestrator-side V1 |
-| `vision/` | §15, App. A | Prompt builders, report semantics, and `inspector.py` — the forced-tool-use Anthropic caller with corrective retry, uncertain crop re-query, and backoff→`InfraError` |
+| `vision/` | §15, App. A | Prompt builders, report semantics, and `inspector.py` — the forced-tool-use Anthropic caller with corrective retry, uncertain crop re-query, and backoff→`InfraError`. `agent_client.py` is a drop-in file-exchange client (`vision.client: agent`) so an interactive agent's own vision can do V2 in credential-less environments |
 | `fixes/` | §16 | Planner + escalation ladder, applicator (`apply.py`), pure-Python param/map fixes |
 | `loop.py` | §4.2, §16.5–16.6 | Per-asset state machine with all five stopping conditions |
 | `stages/` | §4.3 | `SubprocessStages`: Blender subprocess spawning (timeout, retry-once, `InfraError`), §9.3 param resolution, fix resume semantics, pre-vision A-checks |
@@ -50,6 +50,14 @@ vision stage. In a Claude Code remote container, `bash
 scripts/setup_toolchain.sh` provisions both binaries in one command (see
 `docs/NEXT_STEPS.md` for the resume-work guide). The §3 toolchain gate
 hard-fails a run on version mismatch unless `toolchain.require_exact: false`.
+
+Without API credentials, V2 can instead be driven by an interactive agent's
+own vision: `--vision-client agent --vision-exchange <dir>` makes each vision
+call block while it dumps prompt + renders to `<dir>/call_NNNN/`; whoever
+watches the exchange dir inspects the images and writes the tool input to
+`call_NNNN/report.json` (see `vision/agent_client.py` for the protocol). The
+report then flows through the identical semantic validation, two-view rule,
+and uncertainty policy as an API response.
 
 ## Test tiers (spec §21) — what runs where
 
