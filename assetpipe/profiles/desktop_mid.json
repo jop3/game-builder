@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "profile": "desktop_mid",
+  "triangles": {
+    "prop_small": {
+      "max": 1500,
+      "min": 75
+    },
+    "prop_hero": {
+      "max": 10000,
+      "min": 500
+    },
+    "character_primary": {
+      "max": 15000,
+      "min": 750
+    },
+    "character_background": {
+      "max": 4000,
+      "min": 200
+    },
+    "environment_piece": {
+      "max": 5000,
+      "min": 250
+    },
+    "modular_kit_piece": {
+      "max": 2500,
+      "min": 125
+    }
+  },
+  "textures": {
+    "prop_small": {
+      "albedo": 1024,
+      "normal": 1024,
+      "orm": 1024,
+      "emissive": 512
+    },
+    "prop_hero": {
+      "albedo": 2048,
+      "normal": 2048,
+      "orm": 2048,
+      "emissive": 512
+    },
+    "character_primary": {
+      "albedo": 2048,
+      "normal": 2048,
+      "orm": 2048,
+      "emissive": 512
+    },
+    "character_background": {
+      "albedo": 1024,
+      "normal": 1024,
+      "orm": 1024,
+      "emissive": 512
+    },
+    "environment_piece": {
+      "albedo": 1024,
+      "normal": 1024,
+      "orm": 1024,
+      "emissive": 512
+    },
+    "modular_kit_piece": {
+      "albedo": 1024,
+      "normal": 1024,
+      "orm": 1024,
+      "emissive": 512
+    },
+    "tiling_texture_set": {
+      "albedo": 2048,
+      "normal": 2048,
+      "orm": 2048,
+      "emissive": 2048
+    }
+  },
+  "file_bytes": {
+    "prop_small": 4194304,
+    "modular_kit_piece": 4194304,
+    "prop_hero": 16777216,
+    "character_primary": 16777216,
+    "environment_piece": 6291456,
+    "character_background": 6291456
+  },
+  "lod_ratios": [
+    0.5,
+    0.25
+  ],
+  "skybox_resolution": [
+    4096,
+    2048
+  ],
+  "background_layer_resolution": [
+    2048,
+    1152
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://assetpipe/schemas/fix_plan.schema.json",
+  "title": "FixPlan",
+  "type": "object",
+  "properties": {
+    "asset_id": {"type": "string"},
+    "for_iteration": {"type": "integer", "minimum": 1},
+    "produces_iteration": {"type": "integer", "minimum": 2},
+    "defects_addressed": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+    "actions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "properties": {
+          "type": {"enum": ["table_fix", "param_patch", "llm_param_patch", "subcomponent_regen", "full_regen"]},
+          "fix_id": {"type": "string"},
+          "target": {"type": "string"},
+          "patch": {
+            "type": "array",
+            "maxItems": 4,
+            "items": {
+              "type": "object",
+              "properties": {
+                "op": {"enum": ["replace"]},
+                "path": {"type": "string", "pattern": "^/"},
+                "value": {}
+              },
+              "required": ["op", "path", "value"],
+              "additionalProperties": false
+            }
+          },
+          "new_seed": {"type": "integer", "minimum": 0}
+        },
+        "required": ["type"],
+        "additionalProperties": false,
+        "allOf": [
+          {"if": {"properties": {"type": {"const": "table_fix"}}}, "then": {"required": ["fix_id"]}},
+          {"if": {"properties": {"type": {"const": "param_patch"}}}, "then": {"required": ["patch"]}},
+          {"if": {"properties": {"type": {"const": "full_regen"}}}, "then": {"required": ["new_seed"]}}
+        ]
+      }
+    },
+    "planner": {"enum": ["table", "llm", "escalation"]},
+    "resume_stage": {"enum": ["G", "M", "B", "X"]}
+  },
+  "required": ["asset_id", "for_iteration", "produces_iteration", "defects_addressed", "actions", "planner", "resume_stage"],
+  "additionalProperties": false
+}
