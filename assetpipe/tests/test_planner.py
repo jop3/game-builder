@@ -20,14 +20,14 @@ def test_table_fix_lookup_and_schema_conformance():
     plan = plan_fixes("a", 1, [f()], C, LADDER, PlannerState(), seed=7)
     assert plan["actions"] == [{"type": "table_fix", "fix_id": "rebake_margin_x2",
                                 "target": "front edge"}]
-    assert plan["resume_stage"] == "M" and plan["planner"] == "table"
+    assert plan["resume_stage"] == "X" and plan["planner"] == "table"
     jsonschema.validate(strip_internal(plan), C.fix_plan_schema)
 
 
 def test_resume_stage_is_earliest_across_defects():
     plan = plan_fixes("a", 1, [f(), f("R3", "INVERTED_NORMALS")], C,
                       LADDER, PlannerState(), seed=7)
-    assert plan["resume_stage"] == "G"      # G (normals) earlier than M (seam)
+    assert plan["resume_stage"] == "M"      # M (normals fix) earlier than X (seam rebake)
 
 
 def test_no_table_fix_falls_back_to_llm_before_iter3():
@@ -135,10 +135,10 @@ def test_warn_actions_cannot_pull_resume_earlier_than_blockers():
     is deferred, not planned: an earlier resume regenerates over the artifacts
     the blocker fixes repair, so the blockers recur unchanged and the loop
     no-progress-exits (observed end-to-end on real Blender 4.2)."""
-    blocker = f()                                             # VISIBLE_SEAM -> M
+    blocker = f()                                             # VISIBLE_SEAM -> X
     warn = f("S9", "SELF_INTERSECTION", severity="warn")      # llm patch -> G
     plan = plan_fixes("a", 1, [blocker, warn], C, LADDER, PlannerState(), seed=7)
-    assert plan["resume_stage"] == "M"
+    assert plan["resume_stage"] == "X"
     assert all(a["type"] == "table_fix" for a in plan["actions"])
     assert [d["deferred_for"] for d in plan["_deferred_warn_actions"]] == \
         ["SELF_INTERSECTION"]
@@ -146,15 +146,15 @@ def test_warn_actions_cannot_pull_resume_earlier_than_blockers():
 
 
 def test_warn_actions_at_or_after_blocker_resume_still_ride_along():
-    blocker = f("R3", "INVERTED_NORMALS")                     # -> G resume
-    warn = f("S9", "SELF_INTERSECTION", severity="warn")      # llm patch -> G
+    blocker = f("R3", "INVERTED_NORMALS")                     # recalc fix -> M resume
+    warn = f("S12e", "BAKE_MARGIN_LOW", severity="warn")      # reunwrap fix -> M
     plan = plan_fixes("a", 1, [blocker, warn], C, LADDER, PlannerState(), seed=7)
-    assert plan["resume_stage"] == "G"
-    assert {a["type"] for a in plan["actions"]} == {"table_fix", "llm_param_patch"}
+    assert plan["resume_stage"] == "M"
+    assert {a["fix_id"] for a in plan["actions"]} == {"recalc_normals", "reunwrap_margin"}
     assert plan["_deferred_warn_actions"] == []
 
 
 def test_blockers_pulling_resume_earlier_is_still_allowed():
     plan = plan_fixes("a", 1, [f(), f("R3", "INVERTED_NORMALS")], C,
                       LADDER, PlannerState(), seed=7)
-    assert plan["resume_stage"] == "G"      # both blockers: earliest wins as before
+    assert plan["resume_stage"] == "M"      # both blockers: earliest wins as before

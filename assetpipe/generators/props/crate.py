@@ -73,12 +73,15 @@ def generate(params: dict, rng, theme: dict):
     n_greebles = int(round(len(side_faces) * params["greeble_density"] * 0.5))
     for f in side_faces[:n_greebles]:
         size = f.calc_area() ** 0.5
-        result = bmesh.ops.inset_individual(bm, faces=[f], thickness=size * 0.2,
-                                             depth=0.0)
-        pushed = result.get("faces") or [f]
+        bmesh.ops.inset_individual(bm, faces=[f], thickness=size * 0.2, depth=0.0)
+        # inset_individual returns the RING faces, not the inner cap (verified
+        # on real Blender 4.2); the original face remains the cap. Push only
+        # the cap's verts: the ring's outer verts are shared with the
+        # surrounding surface, and translating them warps neighboring faces
+        # (self-intersections + folded UV charts were the observed result).
         depth = rng.uniform(0.002, 0.01)
         normal = f.normal.copy()
-        bmesh.ops.translate(bm, verts=list({v for pf in pushed for v in pf.verts}),
+        bmesh.ops.translate(bm, verts=list(f.verts),
                              vec=(normal.x * depth, normal.y * depth, normal.z * depth))
 
     common.base_center_origin(bm)

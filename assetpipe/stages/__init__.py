@@ -45,7 +45,7 @@ from PIL import Image
 
 from assetpipe.blender_scripts import contact_sheets
 from assetpipe.contracts import Contracts, stage_order
-from assetpipe.fixes.apply import FixContext, apply_fix_plan
+from assetpipe.fixes.apply import ApplyResult, FixContext, apply_fix_plan
 from assetpipe.loop import InfraError, StageResult
 from assetpipe.rundir import HistoryLog, RunDir
 from assetpipe.validation.image_checks import (check_backface_fraction, check_clipping,
@@ -305,10 +305,27 @@ class SubprocessStages:
         ctx = FixContext(iter_dir=iter_dir, request=self.request, contracts=self.contracts,
                          config=self.config, param_schema=self.param_schema,
                          llm_patch_fn=self.llm_patch_fn)
-        result = apply_fix_plan(fix_plan, ctx)
+
+        # Pure-python MAP fixes operate on maps/ -- the artifacts a rebake
+        # (re-run below when resume <= M) would immediately overwrite, and
+        # which don't even exist yet in this iter dir unless resume is X.
+        # Split them out and apply them right before export instead.
+        def _is_map_fix(action: dict) -> bool:
+            if action.get("type") != "table_fix":
+                return False
+            fix = self.contracts.fixes.get(action.get("fix_id"), {})
+            return str(fix.get("implementation", "")).startswith("assetpipe.fixes.map_fixes.")
+
+        map_actions = [a for a in fix_plan["actions"] if _is_map_fix(a)]
+        pre_actions = [a for a in fix_plan["actions"] if not _is_map_fix(a)]
+        if pre_actions:
+            result = apply_fix_plan({**fix_plan, "actions": pre_actions}, ctx)
+        else:
+            result = ApplyResult()
         self._log("fix_applied", iteration=iteration, applied=len(result.applied),
                   failed=len(result.failed), params_changed=result.params_changed,
-                  blender_actions=len(result.blender_actions))
+                  blender_actions=len(result.blender_actions),
+                  map_fixes_deferred_to_pre_export=len(map_actions))
 
         if result.blender_actions and resume_idx <= stage_order("G"):
             # A resume at G regenerates the mesh and re-runs M+X, so blender-
@@ -362,6 +379,11 @@ class SubprocessStages:
                                "out_dir": str(iter_dir), "texture_resolution": texture_budget,
                                "tiling": category == "tiling_texture_set", "iteration": iteration},
                               "bake", blend_path=iter_dir / "asset.blend")
+        if map_actions:
+            map_result = apply_fix_plan({**fix_plan, "actions": map_actions}, ctx)
+            self._log("map_fixes_applied", iteration=iteration,
+                      applied=len(map_result.applied), failed=len(map_result.failed))
+
         maps = {name: str(iter_dir / "maps" / f"{name}.png") for name in
                 ("albedo", "normal", "orm", "emissive") if (iter_dir / "maps" / f"{name}.png").exists()}
         self._run_blender("export_gltf.py", iter_dir,

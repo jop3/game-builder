@@ -27,11 +27,14 @@ def test_every_rubric_defect_in_taxonomy_and_every_fix_exists():
         broken.validate()
 
 
-def test_fix_resume_stage_never_later_than_defect_stage():
+def test_fix_resume_stage_never_earlier_than_defect_stage():
+    """A table fix repairs the previous iteration's artifact in place, so it
+    resumes at (or after) the stage that produced that artifact; resuming
+    earlier would regenerate over the repair (observed on real Blender)."""
     for did, d in C.defects.items():
         if d["table_fix"]:
             fix_stage = C.fixes[d["table_fix"]]["resume_stage"]
-            assert earliest_stage([fix_stage, d["resume_stage"]]) == fix_stage, did
+            assert earliest_stage([fix_stage, d["resume_stage"]]) == d["resume_stage"], did
 
 
 def test_schemas_are_valid_draft_2020_12():

@@ -68,10 +68,19 @@ class Contracts:
             if fix is not None:
                 if fix not in self.fixes:
                     errors.append(f"defect {did}: table_fix {fix!r} not in fixes.json")
-                elif STAGES.index(self.fixes[fix]["resume_stage"]) > STAGES.index(d["resume_stage"]):
+                elif STAGES.index(self.fixes[fix]["resume_stage"]) < STAGES.index(d["resume_stage"]):
+                    # A table fix repairs the defective artifact IN PLACE on
+                    # the previous iteration's state; the pipeline then resumes
+                    # at or after the stage that produced the artifact, never
+                    # before it -- resuming earlier regenerates the very
+                    # artifact the fix just repaired and discards the repair
+                    # (observed as a NO-PROGRESS loop against real Blender).
+                    # The defect's own resume_stage is where a *param patch*
+                    # resumes (regeneration), not where its table fix does.
                     errors.append(
                         f"defect {did}: fix {fix!r} resumes at {self.fixes[fix]['resume_stage']}"
-                        f" which is later than the defect's stage {d['resume_stage']}")
+                        f" which is earlier than the defect's stage {d['resume_stage']}"
+                        f" -- the resumed stages would regenerate over the repair")
         for fid, f in self.fixes.items():
             if f["resume_stage"] not in STAGES:
                 errors.append(f"fix {fid}: bad resume_stage {f['resume_stage']!r}")
