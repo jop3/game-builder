@@ -36,6 +36,17 @@ from pathlib import Path
 
 import bpy
 
+# Blender's bundled Python does not have this repo on sys.path when a stage
+# script is launched via `blender --background --python <this file>`; bootstrap
+# the repo root (two levels up) so `import assetpipe` works. Kept dependency-
+# free (os, not pathlib) and inserted before the first assetpipe import.
+import os as _os
+import sys as _sys
+
+_REPO_ROOT = _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+if _REPO_ROOT not in _sys.path:
+    _sys.path.insert(0, _REPO_ROOT)
+
 from assetpipe.blender_scripts import common
 from assetpipe.blender_scripts.generate import deterministic_scene_settings
 
@@ -132,6 +143,38 @@ def _target_image(nt, name: str, resolution: int, colorspace: str, float_buffer:
     return img, tex_node
 
 
+def _pixels_to_array(img) -> "np.ndarray":
+    """Image pixels as a top-down ``(H, W, 4)`` float32 array. Blender stores
+    pixel rows bottom-up; flip so row 0 is the image's top row."""
+    import numpy as np
+
+    w, h = img.size
+    buf = np.empty(w * h * 4, dtype=np.float32)
+    img.pixels.foreach_get(buf)
+    return buf.reshape(h, w, 4)[::-1]
+
+
+def _save_rgb8_png(arr, out_path: Path) -> None:
+    """Save a top-down ``(H, W, 3)`` uint8 array as an 8-bit PNG through bpy.
+    Blender's bundled Python ships NumPy but NOT Pillow, so in-Blender code
+    must never import PIL (verified against real Blender 4.2). 'Non-Color'
+    with no float buffer means the values are written to disk verbatim."""
+    import numpy as np
+
+    h, w = arr.shape[:2]
+    img = bpy.data.images.new("__save_tmp", width=w, height=h, alpha=False,
+                              float_buffer=False)
+    img.colorspace_settings.name = 'Non-Color'
+    rgba = np.empty((h, w, 4), dtype=np.float32)
+    rgba[..., :3] = arr.astype(np.float32) / 255.0
+    rgba[..., 3] = 1.0
+    img.pixels.foreach_set(np.ascontiguousarray(rgba[::-1]).reshape(-1))
+    img.filepath_raw = str(out_path)
+    img.file_format = 'PNG'
+    img.save()
+    bpy.data.images.remove(img)
+
+
 def _select_active(obj) -> None:
     bpy.ops.object.select_all(action='DESELECT')
     obj.select_set(True)
@@ -139,12 +182,21 @@ def _select_active(obj) -> None:
 
 
 def bake_albedo(obj, mat: "bpy.types.Material", resolution: int, out_path: Path) -> Path:
-    """spec 10.3 step 1: ``DIFFUSE`` bake, color contribution only, sRGB."""
+    """spec 10.3 step 1, corrected against real Blender 4.2: bake the Base
+    Color *input signal* via the EMIT reroute rather than a ``DIFFUSE``
+    color-only pass. The diffuse color pass is weighted by the diffuse
+    closure, which is ZERO wherever metallic=1 -- fully-metal materials bake
+    an all-black albedo (trips S16). EMIT of the Base Color input is exact
+    for every metallic value and matches glTF ``baseColorTexture`` semantics
+    (the metalness split lives in the ORM map, not in the albedo)."""
     scene = bpy.context.scene
-    scene.cycles.samples = BAKE_SAMPLES_COLOR
+    nt = mat.node_tree
+    bsdf = next(n for n in nt.nodes if n.type == 'BSDF_PRINCIPLED')
+    out_node = next(n for n in nt.nodes if n.type == 'OUTPUT_MATERIAL')
     _select_active(obj)
-    img, _ = _target_image(mat.node_tree, "albedo_bake", resolution, 'sRGB')
-    bpy.ops.object.bake(type='DIFFUSE', pass_filter={'COLOR'})
+    img = _bake_input_via_emit(nt, bsdf.inputs['Base Color'], out_node, resolution,
+                               "albedo_bake", samples=BAKE_SAMPLES_COLOR,
+                               colorspace='sRGB')
     img.filepath_raw = str(out_path)
     img.file_format = 'PNG'
     img.save()
@@ -170,16 +222,33 @@ def bake_normal(obj, mat: "bpy.types.Material", resolution: int, out_path: Path)
     return out_path
 
 
-def _bake_scalar_via_emit(nt, scalar_socket, out_node, resolution: int, name: str,
-                          samples: int) -> "bpy.types.Image":
+def _bake_input_via_emit(nt, input_socket, out_node, resolution: int, name: str,
+                         samples: int, colorspace: str = 'Non-Color') -> "bpy.types.Image":
     """spec 10.3 step 3 / pbr-material-baking skill's EMIT-reroute trick:
-    Cycles has no direct scalar bake, so temporarily wire the scalar into an
-    Emission shader and bake EMIT (exact, sample-independent)."""
+    Cycles cannot bake an arbitrary socket directly, so temporarily wire the
+    signal into an Emission shader and bake EMIT (exact, sample-independent).
+    Works for scalar sockets (Roughness/Metallic) and color sockets (Base
+    Color) alike."""
     scene = bpy.context.scene
     scene.cycles.samples = samples
-    img, _ = _target_image(nt, name, resolution, 'Non-Color')
+    img, _ = _target_image(nt, name, resolution, colorspace)
     emit = nt.nodes.new('ShaderNodeEmission')
-    nt.links.new(scalar_socket, emit.inputs['Color'])
+    # ``input_socket`` is an *input* socket (e.g. bsdf.inputs['Roughness']);
+    # links.new needs an output as source. Feed emission from whatever drives
+    # the socket, or from a temp node holding its constant default
+    # (verified against real Blender 4.2 -- linking input->input is invalid).
+    temp_value = None
+    if input_socket.links:
+        src = input_socket.links[0].from_socket
+    elif input_socket.type == 'RGBA':
+        temp_value = nt.nodes.new('ShaderNodeRGB')
+        temp_value.outputs[0].default_value = tuple(input_socket.default_value)
+        src = temp_value.outputs[0]
+    else:
+        temp_value = nt.nodes.new('ShaderNodeValue')
+        temp_value.outputs[0].default_value = float(input_socket.default_value)
+        src = temp_value.outputs[0]
+    nt.links.new(src, emit.inputs['Color'])
     surface_input = out_node.inputs['Surface']
     old_from = surface_input.links[0].from_socket if surface_input.links else None
     nt.links.new(emit.outputs['Emission'], surface_input)
@@ -187,6 +256,8 @@ def _bake_scalar_via_emit(nt, scalar_socket, out_node, resolution: int, name: st
     if old_from is not None:
         nt.links.new(old_from, surface_input)
     nt.nodes.remove(emit)
+    if temp_value is not None:
+        nt.nodes.remove(temp_value)
     return img
 
 
@@ -196,7 +267,6 @@ def bake_orm(obj, mat: "bpy.types.Material", resolution: int, out_path: Path,
     EMIT-reroute trick; composited R=AO G=roughness B=metallic with NumPy
     (linear, no alpha channel -- glTF ORM convention)."""
     import numpy as np
-    from PIL import Image
 
     scene = bpy.context.scene
     nt = mat.node_tree
@@ -208,18 +278,21 @@ def bake_orm(obj, mat: "bpy.types.Material", resolution: int, out_path: Path,
     ao_img, _ = _target_image(nt, "ao_bake", resolution, 'Non-Color')
     bpy.ops.object.bake(type='AO')
 
-    rough_img = _bake_scalar_via_emit(nt, bsdf.inputs['Roughness'], out_node,
-                                      resolution, "rough_bake", samples=1)
-    metal_img = _bake_scalar_via_emit(nt, bsdf.inputs['Metallic'], out_node,
-                                      resolution, "metal_bake", samples=1)
+    rough_img = _bake_input_via_emit(nt, bsdf.inputs['Roughness'], out_node,
+                                     resolution, "rough_bake", samples=1)
+    metal_img = _bake_input_via_emit(nt, bsdf.inputs['Metallic'], out_node,
+                                     resolution, "metal_bake", samples=1)
 
     def to_array(img) -> "np.ndarray":
-        buf = np.array(img.pixels[:], dtype=np.float32).reshape(resolution, resolution, 4)
-        return np.clip(buf[..., 0] * 255.0, 0, 255).astype(np.uint8)
+        # _pixels_to_array flips to top-down; _save_rgb8_png flips back on
+        # write, so the composited ORM keeps the same orientation as the
+        # albedo/normal maps Blender saves directly (the old PIL save wrote
+        # Blender's bottom-up rows as top-down, mirroring the ORM vertically).
+        return np.clip(_pixels_to_array(img)[..., 0] * 255.0, 0, 255).astype(np.uint8)
 
     ao_arr, rough_arr, metal_arr = to_array(ao_img), to_array(rough_img), to_array(metal_img)
     orm = np.stack([ao_arr, rough_arr, metal_arr], axis=-1)
-    Image.fromarray(orm, "RGB").save(out_path)
+    _save_rgb8_png(orm, out_path)
     return out_path
 
 
@@ -245,16 +318,18 @@ def renormalize_normal_map(path: Path, min_mean_blue: float = 0.7) -> None:
     """Renormalize XYZ per pixel; raise if the S17 mean-blue sanity floor
     can't be met even after renormalization (spec 10.4, 13.3)."""
     import numpy as np
-    from PIL import Image
 
-    arr = np.asarray(Image.open(path).convert("RGB"), dtype=np.float32) / 255.0
+    src = bpy.data.images.load(str(path), check_existing=False)
+    src.colorspace_settings.name = 'Non-Color'
+    arr = _pixels_to_array(src)[..., :3]
+    bpy.data.images.remove(src)
     xyz = arr * 2.0 - 1.0
     norm = np.linalg.norm(xyz, axis=-1, keepdims=True)
     norm[norm == 0] = 1.0
     xyz = xyz / norm
     out = np.clip((xyz + 1.0) * 0.5 * 255.0, 0, 255).astype(np.uint8)
     mean_blue = float(out[..., 2].mean() / 255.0)
-    Image.fromarray(out, "RGB").save(path)
+    _save_rgb8_png(out, path)
     if mean_blue < min_mean_blue:
         raise ValueError(
             f"normal map {path}: mean blue {mean_blue:.3f} below the {min_mean_blue} "
@@ -293,7 +368,14 @@ def bake_all_maps(ctx: dict, resolution_override: int | None = None, tiling: boo
         obj.data.materials[0] = mat
     else:
         obj.data.materials.append(mat)
-    recipe.build(mat.node_tree, ctx.get("material_params", {}), rng, ctx.get("palette", {}))
+    # Spec 9.3 applies to material recipes too (10.2: "same rules as generator
+    # schemas"): defaults -> theme clamps -> seeded jitter -> request overrides.
+    # ctx["material_params"] holds only the request's material_overrides, so
+    # recipes indexing params["<name>"] need the schema defaults resolved here.
+    params = common.resolve_params(getattr(recipe, "PARAM_SCHEMA", {}) or {},
+                                   ctx.get("theme") or {},
+                                   ctx.get("material_params") or {}, rng)
+    recipe.build(mat.node_tree, params, rng, ctx.get("palette", {}))
 
     scene = bpy.context.scene
     setup_bake_settings(scene)

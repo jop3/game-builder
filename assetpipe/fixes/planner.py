@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from assetpipe.contracts import Contracts, earliest_stage
+from assetpipe.contracts import Contracts, earliest_stage, stage_order
 from assetpipe.vision.report import Finding
 
 
@@ -84,31 +84,51 @@ def plan_fixes(asset_id: str, iteration: int, defects: list[Finding],
             "_fix_by_defect": {},
         }
 
-    actions: list[dict] = []
-    fix_by_defect: dict = {}
-    resume_stages: list[str] = []
-    planner = "table"
+    entries: list[tuple[Finding, dict, str, str]] = []  # (finding, action, stage, kind)
 
     for f in defects:
         if not _out_of_targeted_options(f, contracts, state):
             fix_id = contracts.table_fix_for(f.defect_type)
             action = {"type": "table_fix", "fix_id": fix_id,
                       "target": f.location or f.defect_type}
-            if action not in actions:                     # dedupe identical fixes
-                actions.append(action)
-            fix_by_defect[f.key()] = fix_id
-            resume_stages.append(contracts.fixes[fix_id]["resume_stage"])
+            entries.append((f, action, contracts.fixes[fix_id]["resume_stage"], "table"))
         elif "subcomponent_regen" in allowed:
-            actions.append({"type": "subcomponent_regen",
-                            "target": f.location or f.defect_type})
-            resume_stages.append("G")
-            planner = "escalation"
+            entries.append((f, {"type": "subcomponent_regen",
+                                "target": f.location or f.defect_type}, "G", "escalation"))
         else:
-            actions.append({"type": "llm_param_patch",
-                            "target": f.location or f.defect_type})
-            resume_stages.append(contracts.resume_stage_for(f.defect_type))
-            if planner == "table":
-                planner = "llm"
+            entries.append((f, {"type": "llm_param_patch",
+                                "target": f.location or f.defect_type},
+                            contracts.resume_stage_for(f.defect_type), "llm"))
+
+    # The plan's resume stage is decided by the BLOCKERS. A warn-driven action
+    # whose fix wants an *earlier* resume (e.g. an llm_param_patch at G) must
+    # not hijack the iteration: an earlier resume regenerates/rebakes over the
+    # very artifacts the blocker fixes repair, so the blockers recur unchanged
+    # and the loop no-progress-exits without ever applying its own remedy
+    # (observed end-to-end on real Blender). Such warn actions are deferred --
+    # dropped from this plan; a persisting warn is planned again once the
+    # blockers are gone.
+    blocker_stages = [stage for f, _, stage, _ in entries if f.severity == "blocker"]
+    resume = earliest_stage(blocker_stages or [stage for _, _, stage, _ in entries])
+    resume_order = stage_order(resume)
+
+    actions: list[dict] = []
+    fix_by_defect: dict = {}
+    deferred: list[dict] = []
+    planner = "table"
+    for f, action, stage, kind in entries:
+        if (blocker_stages and f.severity != "blocker"
+                and stage_order(stage) < resume_order):
+            deferred.append({**action, "deferred_for": f.defect_type})
+            continue
+        if action not in actions:                         # dedupe identical fixes
+            actions.append(action)
+        if action["type"] == "table_fix":
+            fix_by_defect[f.key()] = action["fix_id"]
+        if kind == "escalation":
+            planner = "escalation"
+        elif kind == "llm" and planner == "table":
+            planner = "llm"
 
     return {
         "asset_id": asset_id,
@@ -117,8 +137,9 @@ def plan_fixes(asset_id: str, iteration: int, defects: list[Finding],
         "defects_addressed": sorted({f.defect_type for f in defects}),
         "actions": actions,
         "planner": planner,
-        "resume_stage": earliest_stage(resume_stages),
+        "resume_stage": resume,
         "_fix_by_defect": fix_by_defect,   # planner-internal; strip before persisting
+        "_deferred_warn_actions": deferred,   # planner-internal, for history/debug
     }
 
 

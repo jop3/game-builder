@@ -19,6 +19,17 @@ import bmesh
 import bpy
 from mathutils.bvhtree import BVHTree
 
+# Blender's bundled Python does not have this repo on sys.path when a stage
+# script is launched via `blender --background --python <this file>`; bootstrap
+# the repo root (two levels up) so `import assetpipe` works. Kept dependency-
+# free (os, not pathlib) and inserted before the first assetpipe import.
+import os as _os
+import sys as _sys
+
+_REPO_ROOT = _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+if _REPO_ROOT not in _sys.path:
+    _sys.path.insert(0, _REPO_ROOT)
+
 from assetpipe.blender_scripts import common
 
 
@@ -387,10 +398,21 @@ def _label_islands(covered):
 def check_uv_bake_margin(obj, min_texels: int = 4, resolution: int = 1024) -> dict:
     """S12e (warn): minimum distance between distinct UV islands >= min_texels
     at the target resolution. Approximated by dilating each island's mask by
-    ``min_texels`` (Pillow ``MaxFilter``, no scipy dependency) and checking
-    for overlap with any other island's raw mask."""
+    ``min_texels`` (iterated 8-neighbour NumPy dilation: Blender's bundled
+    Python ships NumPy but neither Pillow nor scipy) and checking for overlap
+    with any other island's raw mask."""
     import numpy as np
-    from PIL import Image, ImageFilter
+
+    def _dilate(mask: "np.ndarray", texels: int) -> "np.ndarray":
+        # texels iterations of a 3x3 (8-neighbour) binary dilation == one
+        # dilation by a (2*texels+1)-square element, i.e. PIL MaxFilter(size).
+        out = mask
+        for _ in range(int(texels)):
+            p = np.pad(out, 1)
+            out = (p[1:-1, 1:-1] | p[:-2, 1:-1] | p[2:, 1:-1]
+                   | p[1:-1, :-2] | p[1:-1, 2:]
+                   | p[:-2, :-2] | p[:-2, 2:] | p[2:, :-2] | p[2:, 2:])
+        return out
 
     accum = _rasterize_uv_coverage(obj, resolution)
     labels = _label_islands(accum > 0)
@@ -398,13 +420,11 @@ def check_uv_bake_margin(obj, min_texels: int = 4, resolution: int = 1024) -> di
     if n_islands <= 1:
         return _result("S12e", True, "warn", 0, min_texels, details="single island or no coverage")
 
-    size = 2 * int(min_texels) + 1
     violations = 0
     for i in range(1, n_islands + 1):
-        mask = (labels == i).astype(np.uint8) * 255
-        dilated = np.asarray(Image.fromarray(mask).filter(ImageFilter.MaxFilter(size)))
+        dilated = _dilate(labels == i, min_texels)
         others = (labels != i) & (labels != 0)
-        if np.any((dilated > 0) & others):
+        if np.any(dilated & others):
             violations += 1
     return _result("S12e", violations == 0, "warn", violations, 0,
                    details=f"islands_with_margin_violation={violations}", defect="BAKE_MARGIN_LOW")

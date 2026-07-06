@@ -55,12 +55,22 @@ unless `toolchain.require_exact: false`.
   fixtures, contract cross-consistency, fix-loop unit tests, the vision
   harness against fake clients, the orchestrator end-to-end against a fake
   `blender` executable, and the Godot adapter against a fake `godot` binary.
-- **Needs the real toolchain (not runnable in this container):** golden
-  generation tests (§21.2), real-Blender bake/render smoke tests, real-Godot
-  import verification, and the nightly real-API vision regression (§21.3).
-  The highest-risk unverified seam is glTF occlusion-texture wiring in
-  `blender_scripts/export_gltf.py` (documented in-code) — smoke-test that
-  first when Blender is available.
+- **Verified once against the real toolchain** (Blender 4.2.22 LTS + Godot
+  4.6.3 headless, 2026-07): all nine generator recipes through G + the
+  S1–S12e mesh checks (every blocker passing); the full crate loop
+  end-to-end to `validated` — generate → bake → export → V1 fail
+  (FILE_TOO_LARGE) → shrink-at-X fix iteration → V1 pass → render →
+  A-checks — with the vision stage stubbed; occlusionTexture wiring
+  confirmed in the exported .glb (both LOD materials); and the Godot
+  adapter deliver + headless `--import` + `verify_import.gd` all green on a
+  scratch project. That pass is what produced the sys.path bootstrap,
+  `--python-exit-code`, PIL-free in-Blender code, EMIT-based albedo bake,
+  resume-stage semantics, and empty-scene fixes; re-run the smoke after
+  touching any of those seams.
+- **Still needs the real toolchain in CI:** golden generation tests (§21.2 —
+  byte-stability across runs was not exercised), a rendered-fixture corpus
+  for §21.1's vision tier, tiling/skybox/background branches (no recipe
+  smoke yet), and the nightly real-API vision regression (§21.3).
 
 ## Invariants to preserve
 

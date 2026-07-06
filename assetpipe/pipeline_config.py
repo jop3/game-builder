@@ -50,6 +50,14 @@ def load_config(overrides_path: Path | None = None) -> dict:
     return config
 
 
+def _version_tuple(major_minor: str, component: str) -> tuple[int, int]:
+    m = _VERSION_RE.fullmatch(major_minor.strip())
+    if not m:
+        raise RuntimeError(
+            f"unparseable major.minor version {major_minor!r} for {component!r}")
+    return int(m.group(1)), int(m.group(2))
+
+
 def _parse_major_minor(version_text: str, binary: str) -> str:
     m = _VERSION_RE.search(version_text)
     if not m:
@@ -92,6 +100,12 @@ def toolchain_check(config: dict, probes: dict[str, Callable[[], str]]) -> list[
     than propagating, so a batch run can record every toolchain problem at
     once instead of crashing on the first missing binary.
 
+    A pin ending in ``+`` (e.g. ``"4.3+"``) is a floor, not an exact match:
+    any probed ``major.minor`` >= the floor passes. This is spec 3's Godot row
+    ("**4.3+**"); Blender stays an exact ``"4.2"`` pin because mesh hashes and
+    bake output drift across Blender feature releases, while the Godot adapter
+    only needs the 4.3 import surface that later 4.x releases keep.
+
     Components named in ``probes`` but absent from ``config["toolchain"]`` are
     skipped (nothing to compare against); the reverse (a pinned component with
     no probe supplied) is also silently skipped -- callers decide which
@@ -108,7 +122,12 @@ def toolchain_check(config: dict, probes: dict[str, Callable[[], str]]) -> list[
         except Exception as exc:  # noqa: BLE001 - collected, not raised
             errors.append(f"toolchain probe for {name!r} failed: {exc}")
             continue
-        if actual != expected:
+        if str(expected).endswith("+"):
+            floor = _version_tuple(str(expected)[:-1], name)
+            if _version_tuple(actual, name) < floor:
+                errors.append(f"toolchain mismatch for {name!r}: "
+                              f"expected {expected!r}, got {actual!r}")
+        elif actual != expected:
             errors.append(
                 f"toolchain mismatch for {name!r}: expected {expected!r}, got {actual!r}")
     return errors

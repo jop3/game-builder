@@ -76,7 +76,7 @@ def test_static_fail_skips_render_and_vision():
     assert res.state == State.VALIDATED and res.shipped_iteration == 2
     kinds1 = [c for c in st.calls if len(c) > 1 and c[1] == 1]
     assert ("render", 1) not in kinds1 and ("inspect", 1) not in kinds1
-    assert ("apply_fix", 2, "G") in st.calls          # resumed at G for mesh fix
+    assert ("apply_fix", 2, "M") in st.calls          # in-place mesh fix -> rebake
 
 
 def test_vision_fail_then_fix_then_pass():
@@ -85,7 +85,7 @@ def test_vision_fail_then_fix_then_pass():
         [StageResult(False, [blocker()]), PASS])
     res = run_asset_loop(REQ, st, C, CFG, clock)
     assert res.state == State.VALIDATED and res.shipped_iteration == 2
-    assert ("apply_fix", 2, "M") in st.calls          # seam fix resumes at bake
+    assert ("apply_fix", 2, "X") in st.calls          # in-fix rebake -> re-export only
 
 
 def test_cap_exhaustion_ships_best_effort_with_best_iteration():

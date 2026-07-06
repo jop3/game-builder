@@ -398,8 +398,12 @@ def test_apply_fix_resume_g_does_not_copy_blend_or_maps_forward(tmp_path, fake_b
     plan = _fix_plan("G", "cleanup_mesh", "NON_MANIFOLD")
     stages.apply_fix(2, plan)
 
+    # A resume at G regenerates the mesh, so blender-side actions targeting
+    # the previous iteration's state are skipped entirely -- there is no
+    # iter_02 .blend for fixes.py to open until generate.py runs (real
+    # Blender hard-fails on the missing file; the fake never noticed).
     calls = [json.loads(l)["script"] for l in log_path.read_text().splitlines()]
-    assert calls == ["fixes.py", "generate.py", "bake.py", "export_gltf.py"]
+    assert calls == ["generate.py", "bake.py", "export_gltf.py"]
 
 
 # ---------------------------------------------------------------------------
@@ -511,3 +515,18 @@ def test_a_check_blocker_short_circuits_vision_call(tmp_path, fake_blender):
 
     assert not result.passed
     assert any(f.defect_type == "SCALE_IMPLAUSIBLE" for f in result.blockers)
+
+
+def test_apply_fix_copies_generate_record_forward(tmp_path, fake_blender, monkeypatch):
+    """result.json (generate's record; root_object above all) must ride along
+    on any resume that skips generate -- static_validate/render of the fix
+    iteration read it (a resume-X iteration crashed the mesh checks with
+    object_name=None on real Blender)."""
+    stages, run_dir = make_stages(tmp_path, fake_blender)
+    stages.generate(1, seed=7)
+
+    plan = _fix_plan("X", "reexport", "GLTF_INVALID")
+    stages.apply_fix(2, plan)
+
+    iter2 = run_dir.iter_dir("crate_01", 2)
+    assert json.loads((iter2 / "result.json").read_text()).get("root_object")

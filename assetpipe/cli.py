@@ -105,10 +105,19 @@ def cmd_render(args) -> int:
                "iteration": 0}
     args_path = out_dir / "render.args.json"
     args_path.write_text(json.dumps(payload, indent=2))
-    cmd = [args.blender_bin, "--background", "--python",
+    cmd = [args.blender_bin, "--background", "--python-exit-code", "1", "--python",
            str(BLENDER_SCRIPTS_DIR / "render_views.py"), "--", "--args-json", str(args_path)]
     proc = subprocess.run(cmd, capture_output=True, text=True,
                           timeout=cfg.get("stage_timeouts", {}).get("render", 900))
+    if proc.returncode == 0:
+        # Sheets are composed orchestrator-side (Blender's Python has no Pillow).
+        from assetpipe.blender_scripts import contact_sheets
+        result = json.loads((out_dir / "result.json").read_text()) \
+            if (out_dir / "result.json").exists() else {}
+        view_ids = result.get("views", []) or \
+            sorted(p.stem for p in out_dir.glob("*.png")
+                   if not p.stem.startswith("contact_sheet"))
+        contact_sheets.compose_all(out_dir, view_ids, out_dir)
     _print({"exit": proc.returncode, "out_dir": str(out_dir),
             "stderr_tail": (proc.stderr or "")[-500:]})
     return 0 if proc.returncode == 0 else 1

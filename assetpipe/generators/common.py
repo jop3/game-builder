@@ -150,9 +150,17 @@ def smart_uv_project(obj, texture_resolution: int = 1024) -> None:
 
     import bpy
 
-    margin = 4.0 / texture_resolution
+    # 2x the 4-texel S12e requirement: Blender's island_margin is nominal
+    # (actual gaps come out smaller depending on island scale), and the S12e
+    # dilation check needs a strictly-greater-than-4-texel gap, so aiming at
+    # exactly 4 fails all over (observed against real Blender 4.2).
+    margin = 8.0 / texture_resolution
     bpy.context.view_layer.objects.active = obj
     bpy.ops.object.mode_set(mode="EDIT")
     bpy.ops.mesh.select_all(action="SELECT")
-    bpy.ops.uv.smart_project(angle_limit=math.radians(66), island_margin=margin)
+    # 35 deg, not the folkloric 66: at 66 the charts swallow bevel-corner
+    # fans whose facets differ by ~60 deg, and projecting those onto one
+    # plane folds them over each other -- real S12b overlap, measured on
+    # real Blender 4.2 (66/55 deg: 1.0%; 35 deg: 0.49%, passing).
+    bpy.ops.uv.smart_project(angle_limit=math.radians(35), island_margin=margin)
     bpy.ops.object.mode_set(mode="OBJECT")

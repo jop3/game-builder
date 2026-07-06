@@ -524,7 +524,11 @@ converting a height PNG afterward (fewer moving parts, correct tangent space for
 Cycles, GPU-off deterministic CPU mode acceptable (config flag), `samples=16` for color
 passes / `64` for normal+AO, margin = 8 px (bleed), using the asset's final UVs:
 
-1. `albedo.png` — bake type `DIFFUSE`, contributions: color only. sRGB.
+1. `albedo.png` — the Base Color input signal baked via the EMIT reroute (same trick as
+   step 3). sRGB. *(Corrected from "bake type `DIFFUSE`, color only": the diffuse color
+   pass is weighted by the diffuse closure, which is zero wherever metallic=1 — fully-metal
+   materials bake an all-black albedo, tripping S16. EMIT of Base Color is exact for every
+   metallic value and matches glTF `baseColorTexture` semantics; verified on Blender 4.2.)*
 2. `normal.png` — bake type `NORMAL`, space `TANGENT`, swizzle **OpenGL (+Y green)** — this is
    the glTF convention; the Godot importer expects glTF convention and handles it.
 3. `orm.png` — three separate scalar bakes (AO via `AO` bake 64 samples; roughness and

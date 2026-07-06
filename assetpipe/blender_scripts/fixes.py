@@ -23,6 +23,17 @@ import bmesh
 import bpy
 from mathutils.bvhtree import BVHTree
 
+# Blender's bundled Python does not have this repo on sys.path when a stage
+# script is launched via `blender --background --python <this file>`; bootstrap
+# the repo root (two levels up) so `import assetpipe` works. Kept dependency-
+# free (os, not pathlib) and inserted before the first assetpipe import.
+import os as _os
+import sys as _sys
+
+_REPO_ROOT = _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+if _REPO_ROOT not in _sys.path:
+    _sys.path.insert(0, _REPO_ROOT)
+
 from assetpipe.blender_scripts import bake, common, export_gltf
 from assetpipe.blender_scripts.generate import apply_all_modifiers, run_finishing_pass
 
@@ -84,7 +95,9 @@ def reunwrap_margin(ctx: dict, action: dict) -> dict:
     bpy.context.view_layer.objects.active = obj
     bpy.ops.object.mode_set(mode='EDIT')
     bpy.ops.mesh.select_all(action='SELECT')
-    bpy.ops.uv.smart_project(angle_limit=math.radians(66), island_margin=margin)
+    # 35 deg for the same reason as generators/common.smart_uv_project: at 66
+    # bevel-corner fans fold within one chart (the very S12b this fix targets).
+    bpy.ops.uv.smart_project(angle_limit=math.radians(35), island_margin=margin)
     bpy.ops.uv.pack_islands(margin=margin)
     bpy.ops.object.mode_set(mode='OBJECT')
     return {"fix_id": "reunwrap_margin", "object": obj.name, "island_margin": margin}

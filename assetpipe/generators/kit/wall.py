@@ -29,32 +29,35 @@ BBOX_RANGE = {"min": [WIDTH_M, 0.15, HEIGHT_M], "max": [WIDTH_M, 0.4, HEIGHT_M]}
 
 
 def _place_edge_sockets(root_obj, thickness):
-    """Sockets every 0.5 m along the left/right/top/bottom edges, on both
-    wall faces are not needed -- kit pieces meet edge-to-edge in the XZ
-    plane; Y (thickness) sockets are centered.
+    """Sockets every 0.5 m along the left/right/top/bottom edges. All socket
+    coordinates must sit exactly on the 0.5 m grid (S10 checks every axis),
+    so Y is the wall's center plane (0.0) -- a thickness-derived offset like
+    t/2 is off-grid for any thickness that isn't a grid multiple (caught by
+    S10 against real Blender).
     """
+    del thickness  # geometry parameter; sockets are grid-plane entities
     from assetpipe.generators import common
 
     n = int(round(WIDTH_M / GRID))
     idx = 0
     for i in range(n + 1):
         x = -WIDTH_M / 2.0 + i * GRID
-        common.add_socket(root_obj, f"SOCKET_BOTTOM_{idx}", (x, thickness / 2.0, 0.0))
+        common.add_socket(root_obj, f"SOCKET_BOTTOM_{idx}", (x, 0.0, 0.0))
         idx += 1
     idx = 0
     for i in range(n + 1):
         x = -WIDTH_M / 2.0 + i * GRID
-        common.add_socket(root_obj, f"SOCKET_TOP_{idx}", (x, thickness / 2.0, HEIGHT_M))
+        common.add_socket(root_obj, f"SOCKET_TOP_{idx}", (x, 0.0, HEIGHT_M))
         idx += 1
     idx = 0
     for i in range(n + 1):
         z = i * GRID
-        common.add_socket(root_obj, f"SOCKET_LEFT_{idx}", (-WIDTH_M / 2.0, thickness / 2.0, z))
+        common.add_socket(root_obj, f"SOCKET_LEFT_{idx}", (-WIDTH_M / 2.0, 0.0, z))
         idx += 1
     idx = 0
     for i in range(n + 1):
         z = i * GRID
-        common.add_socket(root_obj, f"SOCKET_RIGHT_{idx}", (WIDTH_M / 2.0, thickness / 2.0, z))
+        common.add_socket(root_obj, f"SOCKET_RIGHT_{idx}", (WIDTH_M / 2.0, 0.0, z))
         idx += 1
 
 

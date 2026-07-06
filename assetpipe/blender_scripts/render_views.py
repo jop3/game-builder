@@ -3,14 +3,14 @@
 Imports the **exported ``.glb``** into a clean scene (never the authoring
 ``.blend`` -- spec 14.1: "this is how export-time texture/tangent bugs become
 visible"), scenes the standard furniture (18% grey ground, labeled 1 m
-reference cube), and renders the full spec 14.2 view set per asset category,
-then composites contact sheets (spec 14.3).
+reference cube), and renders the full spec 14.2 view set per asset category.
 
 The view table, lighting-rig specs, and bbox-based camera-framing math live
 in the bpy-free :mod:`assetpipe.blender_scripts.views` module (unit-tested
-without Blender); contact-sheet composition lives in the bpy-free
-:mod:`assetpipe.blender_scripts.contact_sheets` module. This file wraps both
-with the actual ``bpy``/``mathutils`` calls needed to drive Blender.
+without Blender). Contact-sheet composition (spec 14.3) is Pillow-based and
+Blender's bundled Python has no Pillow, so the *orchestrator* composes the
+sheets from this script's per-view PNGs after the subprocess returns (see
+``SubprocessStages.render`` / ``cli.cmd_render``).
 """
 from __future__ import annotations
 
@@ -20,7 +20,18 @@ from pathlib import Path
 import bpy
 from mathutils import Vector
 
-from assetpipe.blender_scripts import common, contact_sheets, views
+# Blender's bundled Python does not have this repo on sys.path when a stage
+# script is launched via `blender --background --python <this file>`; bootstrap
+# the repo root (two levels up) so `import assetpipe` works. Kept dependency-
+# free (os, not pathlib) and inserted before the first assetpipe import.
+import os as _os
+import sys as _sys
+
+_REPO_ROOT = _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+if _REPO_ROOT not in _sys.path:
+    _sys.path.insert(0, _REPO_ROOT)
+
+from assetpipe.blender_scripts import common, views
 from assetpipe.blender_scripts.generate import deterministic_scene_settings
 
 _BLACKBODY_RGB_TABLE = {4500: (1.0, 0.79, 0.63)}  # see setup_lighting_rig() note
@@ -133,6 +144,11 @@ def setup_lighting_rig(rig_id: str) -> None:
     bpy.context.scene.world = world
     world.use_nodes = True
     bg = world.node_tree.nodes.get("Background")
+    # Pin the dome color: a fresh world's Background node defaults to 0.05
+    # grey, which under AgX leaves even the L1 "neutral studio" renders murky
+    # (max pixel ~0.24 measured on real Blender 4.2). White dome; the rig's
+    # Strength input is the single exposure knob.
+    bg.inputs["Color"].default_value = (1.0, 1.0, 1.0, 1.0)
 
     if rig_id == "L1":
         bg.inputs["Strength"].default_value = 1.0
@@ -339,11 +355,9 @@ def main() -> None:
         else:
             rendered = render_mesh_views(scene, category, out_dir)
 
-    sheets = contact_sheets.compose_all(out_dir, rendered, out_dir)
     common.write_result(out_dir / "result.json", {
         "stage": "R",
         "views": rendered,
-        "contact_sheets": [str(p) for p in sheets],
     })
 
 
