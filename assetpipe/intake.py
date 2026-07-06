@@ -141,7 +141,9 @@ def validate_request(request: dict, contracts: Contracts, *,
                     errors.append(
                         f"generator {generator!r} has CATEGORY {module.CATEGORY!r}, "
                         f"which does not match request category {category!r}")
-        elif category in MESH_CATEGORIES:
+        elif category in MESH_CATEGORIES or category == "tiling_texture_set":
+            # tiling_texture_set resolves a generator too: its recipe builds
+            # the spec-10.3 unit-plane bake target rather than a prop.
             description = request.get("description", "")
             resolved = registry.resolve(category, description)
             if resolved is None:
@@ -150,6 +152,13 @@ def validate_request(request: dict, contracts: Contracts, *,
                     f"category {category!r} from description {description!r}")
             else:
                 normalized["generator"] = resolved
+        elif category in ("skybox", "background_2d"):
+            # Fail fast (spec 6: zero iterations consumed on rejection): the
+            # loop has no stage-B branch yet, so accepting these would spawn
+            # Blender only to hard-fail on generator resolution mid-loop.
+            errors.append(
+                f"NOT_IMPLEMENTED: category {category!r} has no pipeline branch "
+                f"yet (stage B is unimplemented); rejected at intake")
 
     if profile is not None and category is not None:
         overrides = request.get("budget_overrides") or {}

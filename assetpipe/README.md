@@ -67,10 +67,20 @@ unless `toolchain.require_exact: false`.
   `--python-exit-code`, PIL-free in-Blender code, EMIT-based albedo bake,
   resume-stage semantics, and empty-scene fixes; re-run the smoke after
   touching any of those seams.
-- **Still needs the real toolchain in CI:** golden generation tests (§21.2 —
-  byte-stability across runs was not exercised), a rendered-fixture corpus
-  for §21.1's vision tier, tiling/skybox/background branches (no recipe
-  smoke yet), and the nightly real-API vision regression (§21.3).
+- **Also verified (second pass):** §21.2 determinism — same-seed G runs are
+  byte-identical (params.json, mesh+UV hash) and two independent Cycles
+  bakes of the same blend produce byte-identical PNGs (well inside the
+  RMSE ≤ 2/255 tolerance); and the tiling_texture_set branch end-to-end
+  (the `tiling/surface` unit-plane recipe, TILING material selection,
+  periodic-domain verification in the bake).
+- **Still needs the real toolchain in CI:** a rendered-fixture corpus for
+  §21.1's vision tier, and the real-API vision regression (§21.3 — this
+  container has no Anthropic API credentials; the vision stage is verified
+  against fakes only). skybox/background_2d have NO pipeline branch (stage
+  B is unimplemented); intake rejects them with `NOT_IMPLEMENTED` so no
+  iterations are consumed — the render harness's skybox views, the sky
+  fixes, and the Godot adapter's skybox/background delivery are already in
+  place for when stage B lands.
 
 ## Invariants to preserve
 

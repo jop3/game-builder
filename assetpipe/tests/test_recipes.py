@@ -7,10 +7,11 @@ import inspect
 
 import pytest
 
-from assetpipe.contracts import MESH_CATEGORIES
+from assetpipe.contracts import GENERATOR_CATEGORIES
 from assetpipe.generators.registry import Registry
 
 EXPECTED_RECIPES = {
+    "tiling/surface": "tiling_texture_set",
     "props/crate": "prop_small",
     "props/barrel": "prop_small",
     "props/lantern": "prop_small",
@@ -32,7 +33,7 @@ def registry():
 
 # ---------- discovery ----------
 
-def test_discover_finds_all_nine_recipes(registry):
+def test_discover_finds_all_recipes(registry):
     assert set(registry.ids()) == set(EXPECTED_RECIPES)
 
 
@@ -40,7 +41,7 @@ def test_discover_finds_all_nine_recipes(registry):
 def test_recipe_has_expected_category(registry, recipe_id, expected_category):
     module = registry.get(recipe_id)
     assert module.CATEGORY == expected_category
-    assert module.CATEGORY in MESH_CATEGORIES
+    assert module.CATEGORY in GENERATOR_CATEGORIES
 
 
 def test_crate_matches_spec_9_1_example_schema(registry):
@@ -134,8 +135,8 @@ def test_generate_exists_and_is_callable(registry, recipe_id):
     assert list(sig.parameters) == ["params", "rng", "theme"]
 
 
-def test_registering_all_nine_recipes_does_not_raise():
+def test_registering_all_recipes_does_not_raise():
     # Registry.discover() already calls register() internally; re-assert
     # the whole set validates together (no cross-recipe id collisions etc.)
     reg = Registry.discover()
-    assert len(reg) == 9
+    assert len(reg) == len(EXPECTED_RECIPES)

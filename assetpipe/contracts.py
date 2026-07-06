@@ -23,7 +23,11 @@ MESH_CATEGORIES = (
     "prop_small", "prop_hero", "character_primary", "character_background",
     "environment_piece", "modular_kit_piece",
 )
-ALL_CATEGORIES = MESH_CATEGORIES + ("tiling_texture_set", "skybox", "background_2d")
+GENERATOR_CATEGORIES = MESH_CATEGORIES + ("tiling_texture_set",)
+# tiling_texture_set resolves a generator too: its recipe builds the spec-10.3
+# unit-plane bake target. skybox/background_2d are stage-B deliverables with
+# no generator (and no stage-B branch yet -- intake rejects them).
+ALL_CATEGORIES = GENERATOR_CATEGORIES + ("skybox", "background_2d")
 
 
 class ContractError(Exception):

@@ -85,12 +85,30 @@ def test_generator_resolved_from_description_when_omitted(themes_root):
     assert normalized["generator"] == "props/crate"
 
 
-def test_non_mesh_category_needs_no_generator(themes_root):
+def test_tiling_category_resolves_its_bake_target_generator(themes_root):
+    """tiling_texture_set resolves a generator like mesh categories do: the
+    recipe builds the spec-10.3 unit-plane bake target."""
     reg = _registry()
+    tiling_mod = types.ModuleType("surface")
+    tiling_mod.CATEGORY = "tiling_texture_set"
+    tiling_mod.KEYWORDS = ["tiling", "seamless", "plating"]
+    tiling_mod.PARAM_SCHEMA = {"type": "object", "properties": {}}
+    tiling_mod.generate = lambda params, rng, theme: None
+    reg.register("tiling/surface", tiling_mod)
     req = _valid_request(
         category="tiling_texture_set", description="Seamless scuffed metal plating texture")
     normalized = validate_request(req, C, themes_root=themes_root, registry=reg)
-    assert "generator" not in normalized or normalized.get("generator") is None
+    assert normalized.get("generator") == "tiling/surface"
+
+
+def test_skybox_and_background_rejected_as_unimplemented(themes_root):
+    """No stage-B branch exists yet; intake fails fast (spec 6: zero
+    iterations consumed) instead of letting the loop crash mid-run."""
+    for category in ("skybox", "background_2d"):
+        req = _valid_request(category=category, description="a nice sky")
+        with pytest.raises(IntakeError) as excinfo:
+            validate_request(req, C, themes_root=themes_root, registry=_registry())
+        assert "NOT_IMPLEMENTED" in str(excinfo.value)
 
 
 # ---------- individual error classes ----------

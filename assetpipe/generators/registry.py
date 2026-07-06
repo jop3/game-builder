@@ -12,7 +12,7 @@ import pkgutil
 import re
 from types import ModuleType
 
-from assetpipe.contracts import MESH_CATEGORIES
+from assetpipe.contracts import GENERATOR_CATEGORIES
 
 _REQUIRED_ATTRS = ("PARAM_SCHEMA", "CATEGORY", "KEYWORDS", "generate")
 _NUMERIC_TYPES = ("number", "integer")
@@ -60,9 +60,9 @@ class Registry:
                             f"PARAM_SCHEMA.properties.{prop}: numeric params must "
                             f"declare a default")
 
-        if module.CATEGORY not in MESH_CATEGORIES:
+        if module.CATEGORY not in GENERATOR_CATEGORIES:
             errors.append(
-                f"CATEGORY {module.CATEGORY!r} is not one of {MESH_CATEGORIES}")
+                f"CATEGORY {module.CATEGORY!r} is not one of {GENERATOR_CATEGORIES}")
 
         if not isinstance(module.KEYWORDS, list) or not all(
                 isinstance(k, str) for k in module.KEYWORDS):
