@@ -1,0 +1,65 @@
+# Pipeline defaults (spec 20.3). Every validation threshold lives here so tuning
+# never means code edits. Stage implementations must read thresholds from this
+# file (merged with a run-local override file), not hardcode them.
+toolchain:
+  blender: "4.2"
+  godot: "4.3"
+  require_exact: true
+
+vision:
+  model: "claude-fable-5"
+  temperature: 0
+  max_retries: 1              # schema/semantic-validation retries per call
+  max_recheck_rounds: 1       # 'uncertain' crop re-queries per iteration (spec 15.5)
+  max_concurrent_calls: 4
+
+iteration:
+  max_iterations: 5
+  wall_clock_minutes_per_asset: 45
+  subcomponent_regen_from: 3  # escalation ladder (spec 16.1)
+  full_regen_from: 4
+  full_regen_allowed: 1
+  ride_along_warns: true
+
+validation:
+  # V1 static gate thresholds, keyed by check id (spec 13)
+  s2_min_face_area_m2: 1.0e-8
+  s3_min_edge_length_m: 1.0e-6
+  s6_origin_tolerance_m: 0.001
+  s9_max_self_intersect_face_fraction: 0.005
+  s10_socket_grid_tolerance_m: 0.0001
+  s12b_uv_overlap_max_fraction: 0.005
+  s12d_texel_density_p95_p5_max: 4.0
+  s12d_texel_density_hard_max: 8.0     # above this the warn becomes a blocker
+  s12d_conformal_stretch_max: 2.5
+  s12e_min_island_margin_texels: 4
+  s16_albedo_lum_range: [0.02, 0.98]
+  s16_albedo_min_std: 0.01
+  s17_normal_min_mean_blue: 0.7
+  s17_normal_min_up_fraction: 0.99
+  s19a_wrap_seam_ratio_max: 1.5        # seam gradient vs interior p95 (relative, not absolute)
+  s19b_rolled_seam_ratio_max: 1.5
+  a1_min_std: 0.0078
+  a2_max_backface_fraction: 0.001
+  a3_silhouette_range: [0.05, 0.85]
+  a4_max_clipped_fraction: 0.02
+  gltf_extension_whitelist: ["KHR_materials_emissive_strength"]
+
+render:
+  resolution: 1024
+  samples: 128
+  deterministic_cpu: true
+  view_transform: "AgX"
+
+retention:
+  keep_blend: "last"          # last | all | none
+  keep_renders: "all"
+
+delivery:
+  adapters: ["godot"]
+  godot:
+    project_path: null
+    use_pipeline_lods: false
+
+parallelism:
+  assets: 4

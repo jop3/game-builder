@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "comment": "Vision inspection rubric (spec 15.2). criteria strings may reference {description}, {silhouette_language}, {vision_style_brief}, {palette}, {forbidden}, {bbox_range} - filled by the prompt builder. applies_to uses category groups expanded by the loader: @mesh = all mesh-producing categories. min_views_for_fail implements the two-view rule (spec 15.3); a defect seen in fewer distinct views must be reported as 'uncertain'.",
+  "category_groups": {
+    "@mesh": ["prop_small", "prop_hero", "character_primary", "character_background", "environment_piece", "modular_kit_piece"]
+  },
+  "checks": {
+    "R1": {
+      "title": "Render sanity",
+      "severity": "blocker",
+      "applies_to": ["@mesh", "tiling_texture_set", "skybox", "background_2d"],
+      "views": ["*"],
+      "min_views_for_fail": 1,
+      "allowed_defects": ["RENDER_EMPTY"],
+      "criteria": "No view is empty, a single solid color, or unrecognizable garbage. Report pass if every view shows a coherent rendered subject."
+    },
+    "R2": {
+      "title": "Texture presence",
+      "severity": "blocker",
+      "applies_to": ["@mesh", "tiling_texture_set", "background_2d"],
+      "views": ["turn_*", "lit_dark_090"],
+      "min_views_for_fail": 1,
+      "allowed_defects": ["MISSING_TEXTURE", "BLACK_SURFACE"],
+      "criteria": "No surfaces that are pure black, solid magenta, or showing an obvious placeholder/checker pattern where the design calls for a real material. The deliberate uvcheck_045 view is exempt and labeled. In lit_dark_090 the unlit side is expected to be dark - judge texture presence by the rim-lit region only. Report pass if all surfaces show intentional material."
+    },
+    "R3": {
+      "title": "Normal integrity",
+      "severity": "blocker",
+      "applies_to": ["@mesh"],
+      "views": ["normals_045", "normals_225"],
+      "min_views_for_fail": 2,
+      "allowed_defects": ["INVERTED_NORMALS", "NORMAL_MAP_INVALID"],
+      "criteria": "In the normals debug views (surface normal rendered as RGB, backfacing surfaces PURE RED): no red regions, and normal colors vary smoothly with surface direction with no large patches inconsistent with neighboring geometry. Report pass if no red and no incoherent normal patches."
+    },
+    "R4": {
+      "title": "Texture seams",
+      "severity": "blocker",
+      "applies_to": ["@mesh"],
+      "views": ["close_034", "turn_*"],
+      "min_views_for_fail": 1,
+      "allowed_defects": ["VISIBLE_SEAM"],
+      "criteria": "No visible UV-seam discontinuities in albedo or shading: no hard color or lighting line where the surface is geometrically continuous. Report pass if surface patterns flow continuously across the geometry."
+    },
+    "R5": {
+      "title": "Silhouette and type match",
+      "severity": "blocker",
+      "applies_to": ["@mesh"],
+      "views": ["silhouette_000", "silhouette_090", "turn_*"],
+      "min_views_for_fail": 1,
+      "allowed_defects": ["SILHOUETTE_MISMATCH", "MISSING_PART"],
+      "criteria": "The object reads unambiguously as: \"{description}\", in the style: {silhouette_language}. A person seeing only the silhouette should name the object type correctly. Report pass if the type is recognizable and the style language holds."
+    },
+    "R6": {
+      "title": "Scale plausibility",
+      "severity": "blocker",
+      "applies_to": ["@mesh"],
+      "views": ["turn_000", "turn_090"],
+      "min_views_for_fail": 1,
+      "allowed_defects": ["SCALE_IMPLAUSIBLE"],
+      "criteria": "Against the labeled 1 m grey reference cube standing 1.5 m to the asset's left, the object's apparent size is plausible for its description. Expected size range: {bbox_range}. Report pass if apparent size falls in or near that range."
+    },
+    "R7": {
+      "title": "Material response",
+      "severity": "blocker",
+      "applies_to": ["@mesh", "tiling_texture_set"],
+      "views": ["lit_warm_045", "lit_warm_225", "lit_dark_090", "sphere_*"],
+      "min_views_for_fail": 1,
+      "allowed_defects": ["MATERIAL_IMPLAUSIBLE"],
+      "criteria": "Materials respond physically plausibly across the lighting rigs: metals show directional specular and pick up the warm light's color; rough surfaces show broad soft highlights; nothing reads as uniform plastic where the design calls for metal, or mirror-like where it should be rough; emissive elements remain visible in the dark rim-lit view. Report pass if material families read correctly under all three rigs."
+    },
+    "R8": {
+      "title": "Shading artifacts",
+      "severity": "warn",
+      "applies_to": ["@mesh", "tiling_texture_set", "background_2d"],
+      "views": ["turn_*", "high_045", "high_225", "close_034"],
+      "min_views_for_fail": 1,
+      "allowed_defects": ["SHADING_ARTIFACT", "BANDING", "ZFIGHT_COPLANAR"],
+      "criteria": "No banding on smooth gradients, no blocky/faceted shading on surfaces meant to be smooth, no striped z-fighting patterns where faces are coplanar, no stretched or smeared texels. Report ZFIGHT_COPLANAR as the defect for striped coplanar flicker (that one is severe); otherwise SHADING_ARTIFACT or BANDING."
+    },
+    "R9": {
+      "title": "Structural coherence",
+      "severity": "blocker",
+      "applies_to": ["@mesh"],
+      "views": ["turn_*", "high_045", "high_225", "top"],
+      "min_views_for_fail": 2,
+      "allowed_defects": ["FLOATING_PART", "INTERPENETRATION", "MISSING_PART"],
+      "criteria": "No parts floating disconnected from the body, no parts interpenetrating implausibly, no obviously missing functional pieces (e.g. a handle attached to nothing). Intentional detail elements slightly sunk into the surface are acceptable. Report pass if the assembly is structurally coherent."
+    },
+    "R10": {
+      "title": "Tiling seams",
+      "severity": "blocker",
+      "applies_to": ["tiling_texture_set", "background_2d"],
+      "views": ["tile3x3_persp", "tile3x3_top"],
+      "min_views_for_fail": 1,
+      "allowed_defects": ["TILING_SEAM"],
+      "criteria": "The 3x3 tiled surface shows no visible grid: no seam lines at tile borders and no single obvious landmark feature repeating in a grid pattern. Report pass if the tiling reads as a continuous surface."
+    },
+    "R11": {
+      "title": "Skybox integrity",
+      "severity": "blocker",
+      "applies_to": ["skybox"],
+      "views": ["axis_*", "up_pole", "down_pole"],
+      "min_views_for_fail": 1,
+      "allowed_defects": ["POLE_PINCH", "HORIZON_SEAM"],
+      "criteria": "No pinching or swirl artifacts at the zenith (up_pole) or nadir (down_pole); the horizon is level and continuous across adjacent axis views; no hard vertical seam anywhere. Report pass if the sky reads as continuous in all directions."
+    },
+    "R12": {
+      "title": "Theme palette conformance",
+      "severity": "warn",
+      "applies_to": ["@mesh", "tiling_texture_set", "skybox", "background_2d"],
+      "views": ["turn_*", "lit_warm_045", "lit_warm_225"],
+      "min_views_for_fail": 1,
+      "allowed_defects": ["PALETTE_VIOLATION"],
+      "criteria": "Dominant surface colors fall within the theme palette: {palette}. Moderate lighting-induced hue shift is expected and acceptable. None of the forbidden colors ({forbidden}) appear as major surface areas. Overall look matches the style brief: {vision_style_brief}. Report pass unless a dominant color clearly departs from the palette."
+    }
+  }
+}

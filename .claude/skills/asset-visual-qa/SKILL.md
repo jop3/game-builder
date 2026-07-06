@@ -119,15 +119,29 @@ def silhouette_area(img):      # A3: white-on-black silhouette pass
 def clipped_fraction(img):     # A4: blown highlights (warn)
     return float((img >= 254/255).all(-1).mean())
 
-def edge_wrap_diff(img, axis): # tiling: opposite 4px strips must match (≤ 2/255)
-    a = img.take(range(4), axis=axis); b = img.take(range(-4, 0), axis=axis)
-    return float(np.abs(a - np.flip(b, axis=axis)).mean())
+def edge_wrap_ratio(img, axis):
+    # Tiling wrap continuity. IMPORTANT: in a seamless texture the opposite
+    # edges are wrap-ADJACENT texels, not duplicates — an absolute threshold
+    # (e.g. "edges match within 2/255") rejects every texture with
+    # high-frequency detail even when it tiles perfectly. Compare the seam
+    # gradient to the texture's own interior gradient statistics instead:
+    grey = img.mean(-1)
+    grad = np.abs(np.diff(grey, axis=axis)).mean(axis=1 - axis)
+    seam = np.abs(grey.take(0, axis=axis) - grey.take(-1, axis=axis)).mean()
+    return float(seam / (np.percentile(grad, 95) + 1e-6))        # fail if > 1.5
 
-def rolled_seam_spike(img):    # tiling: roll 50%, gradient along former seam vs global median
-    r = np.roll(img, img.shape[0]//2, axis=0)
-    gy = np.abs(np.diff(r.mean(-1), axis=0))
-    seam_row = img.shape[0]//2 - 1
-    return float(gy[seam_row].mean() / (np.median(gy) + 1e-6))   # fail if > 1.5
+def rolled_seam_ratio(img):
+    # Roll 50% both axes; check a ±2-texel WINDOW around the former borders,
+    # not just the border line — the classic naive "make seamless" forgery
+    # clones the outer texel row to match, pushing the discontinuity one texel
+    # inside, where a single-line check misses it.
+    h, w = img.shape[:2]
+    grey = np.roll(np.roll(img, h//2, 0), w//2, 1).mean(-1)
+    gy = np.abs(np.diff(grey, axis=0)).mean(axis=1)
+    gx = np.abs(np.diff(grey, axis=1)).mean(axis=0)
+    base = np.percentile(np.concatenate([gy, gx]), 95) + 1e-6
+    seam = max(gy[h//2-3:h//2+2].max(), gx[w//2-3:w//2+2].max())
+    return float(seam / base)                                     # fail if > 1.5
 ```
 
 ## glTF structural validation

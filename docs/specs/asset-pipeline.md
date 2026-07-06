@@ -1,8 +1,15 @@
 # Autonomous Game Asset Generation Pipeline — Architecture Specification
 
-**Status:** Design specification, ready for implementation. No code in this document has been run;
-all code blocks are normative reference implementations for the builder to start from.
-**Version:** 1.0
+**Status:** Design specification, ready for implementation. Code blocks in this document are
+normative reference implementations for the builder to start from. **Partially implemented:**
+the judgment-critical core (contracts/taxonomy/rubric data, contract loader, vision prompt +
+report semantics, fix planner + escalation ladder, repair-loop state machine, pixel analytics,
+GLB structural checks, platform profiles, config defaults) now exists **and is tested** under
+`assetpipe/` — see `assetpipe/README.md` for exactly what is built, what remains, and the
+invariants to preserve. Where this document and the tested code differ (currently only the
+§13.4 tiling checks, corrected to relative gradient ratios), the code + its tests are
+authoritative and this document has been updated to match.
+**Version:** 1.1
 **Date:** 2026-07-06
 **Audience:** An implementing model/engineer. This document is intended to be sufficient to build
 the pipeline without further clarification from the author.
@@ -696,11 +703,17 @@ the exported `.glb` and PNGs. **All thresholds are config values** (defaults bel
 
 | ID | Check | Pass condition | Severity |
 |---|---|---|---|
-| S19a | Edge wrap | for each map: mean abs diff between opposite 4-px edge strips ≤ 2/255 (both axes for textures; X only for `loop_x` layers) | blocker |
-| S19b | Offset continuity | roll image by 50% both axes; gradient magnitude along the (now central) former seam line ≤ 1.5× median gradient magnitude of the whole image | blocker |
+| S19a | Edge wrap | for each map: the gradient across the wrap seam (last row/col → first row/col) ≤ 1.5× the 95th-percentile interior adjacent-texel gradient (both axes for textures; X only for `loop_x` layers) | blocker |
+| S19b | Offset continuity | roll image by 50% both axes; max per-line gradient in a ±2-texel window around the (now central) former borders ≤ 1.5× the interior p95 gradient | blocker |
 
-(S19b catches "edges match but pattern obviously repeats/discontinues"; the *visual* seam
-check on a 3×3 tiled render is R10, §15.)
+**Why relative, not absolute:** in a seamless texture the opposite edges are wrap-*adjacent*
+texels, not duplicates — an absolute edge-difference threshold (e.g. ≤ 2/255) rejects any
+texture with high-frequency detail even when it tiles perfectly. Both checks therefore
+compare the seam gradient to the texture's own interior gradient statistics. The window in
+S19b catches the classic forgery mode where border texels were blended/cloned to match and
+the discontinuity sits one texel inside the border (S19a alone is fooled by that; the test
+suite proves both behaviors — see `assetpipe/tests/test_image_checks.py`). The *visual*
+seam check on a 3×3 tiled render is R10, §15.
 
 ### 13.5 glTF structural compliance (orchestrator)
 

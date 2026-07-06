@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://assetpipe/schemas/asset_request.schema.json",
+  "title": "AssetRequest",
+  "type": "object",
+  "properties": {
+    "schema_version": {"const": 1},
+    "asset_id": {"type": "string", "pattern": "^[a-z0-9_]{3,64}$"},
+    "category": {"enum": ["prop_small", "prop_hero", "character_primary", "character_background",
+                           "environment_piece", "modular_kit_piece", "tiling_texture_set",
+                           "skybox", "background_2d"]},
+    "theme": {"type": "string", "pattern": "^[a-z0-9_]{3,64}$"},
+    "platform_profile": {"enum": ["desktop_high", "desktop_mid", "web", "mobile"]},
+    "seed": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+    "description": {"type": "string", "minLength": 8, "maxLength": 500},
+    "generator": {"type": "string", "pattern": "^[a-z0-9_]+/[a-z0-9_]+$"},
+    "param_overrides": {"type": "object"},
+    "material_overrides": {"type": "object"},
+    "budget_overrides": {
+      "type": "object",
+      "properties": {
+        "max_triangles": {"type": "integer", "minimum": 12},
+        "max_texture_px": {"type": "integer", "minimum": 64},
+        "max_file_bytes": {"type": "integer", "minimum": 1024}
+      },
+      "additionalProperties": false
+    },
+    "topology": {"enum": ["closed", "open"], "default": "closed"},
+    "collision": {"enum": ["static", "convex", "none"]},
+    "lods": {
+      "oneOf": [
+        {"enum": ["auto", "none"]},
+        {"type": "array", "items": {"type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 1},
+         "minItems": 1, "maxItems": 3}
+      ]
+    },
+    "tags": {"type": "array", "items": {"type": "string", "maxLength": 64}, "maxItems": 16}
+  },
+  "required": ["schema_version", "asset_id", "category", "theme", "platform_profile", "seed", "description"],
+  "additionalProperties": false
+}
