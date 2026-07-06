@@ -7,6 +7,13 @@ the actual GitHub repo (fetching READMEs/skill files, not just search
 snippets) before being included — the source article got several details
 wrong. See "Excluded" at the bottom for what was dropped and why.
 
+**Update:** the two skills below that survived verification (`game-developer`
+and `blender-web-pipeline`) are now vendored directly into this repo at
+`.claude/skills/` — see `.claude/skills/README.md` for provenance. The
+install commands below are left for reference but aren't needed for this
+repo; they're only relevant if you want the marketplace-managed/auto-updating
+version instead of the pinned vendored copy.
+
 **None of these are Godot-native.** The closest thing to a real "game
 developer" skill (`Jeffallan/claude-skills`) explicitly covers Unity/Unreal
 only and does not mention Godot. Everything here is included because it
