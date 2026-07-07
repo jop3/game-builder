@@ -173,10 +173,10 @@ def generate(params: dict, rng, theme: dict):
         n_rows = 7
         sin_p, cos_p = math.sin(pitch), math.cos(pitch)
         for r in range(n_rows):
-            t = (r + 0.5) / n_rows * math.hypot(slope_half_d, rise)
+            t = (r + 0.78) / n_rows * math.hypot(slope_half_d, rise)
             row = bmesh.ops.create_cube(bm, size=1.0)
             row_len = w + 2 * ov + 0.15 + rng.uniform(-0.04, 0.05)
-            row_w = math.hypot(slope_half_d, rise) / n_rows * 1.35
+            row_w = math.hypot(slope_half_d, rise) / n_rows * 1.22
             bmesh.ops.scale(bm, verts=row["verts"], vec=(row_len, row_w, 0.055))
             bmesh.ops.rotate(bm, verts=row["verts"], cent=(0, 0, 0),
                              matrix=Matrix.Rotation(-side * pitch, 3, 'X'))
@@ -250,8 +250,8 @@ def generate(params: dict, rng, theme: dict):
     # --- door on the +X gable: framed plank slab + stone-grey step.
     door_w, door_h = 0.95, 1.9
     door_y = rng.uniform(-0.15, 0.15)
-    framed_opening((door_y, door_h / 2.0), (door_w, door_h), "x", 1.0, glass=False)
-    _box(bm, (0.12, door_w, door_h), (w / 2.0, door_y, door_h / 2.0), SLOT_WALLS)
+    _box(bm, (0.12, door_w, door_h), (w / 2.0 + 0.02, door_y, door_h / 2.0), SLOT_WALLS)
+    _box(bm, (0.16, door_w + 0.22, 0.1), (w / 2.0 + 0.02, door_y, door_h + 0.06), SLOT_WALLS)
     _box(bm, (0.5, door_w + 0.3, 0.12), (w / 2.0 + 0.18, door_y, 0.06), SLOT_WALLS)
 
     # --- windows: framed glowing panes on the long (+/-Y) walls; the first
@@ -289,6 +289,25 @@ def generate(params: dict, rng, theme: dict):
              (dx, pane_y, z_base + dh * 0.5 + dh * 0.25 + 0.04), SLOT_WALLS)
         _box(bm, (dw * 0.55 + 0.12, 0.12, 0.08),
              (dx, pane_y, z_base + dh * 0.5 - dh * 0.25 - 0.04), SLOT_WALLS)
+
+    # --- attached wing (roadmap phase 3): the reference's asymmetric
+    # two-mass build -- a lower volume on the gable end opposite the door,
+    # with its own plank-gabled roof and window.
+    ww_, wd_, wh_ = w * 0.5, d * 0.72, h * 0.68
+    wing_cx = -(w / 2.0 + ww_ / 2.0 - 0.08)
+    wing_part = bmesh.ops.create_cube(bm, size=1.0)
+    bmesh.ops.scale(bm, verts=wing_part["verts"], vec=(ww_, wd_, wh_))
+    bmesh.ops.translate(bm, verts=wing_part["verts"], vec=(wing_cx, 0.0, wh_ / 2.0))
+    wing_edges = {e for v in wing_part["verts"] for e in v.link_edges}
+    bmesh.ops.subdivide_edges(bm, edges=list(wing_edges), cuts=1, use_grid_fill=True)
+    _assign(bm, [v for v in bm.verts if abs(v.co.x - wing_cx) <= ww_ / 2.0 + 0.01
+                 and abs(v.co.y) <= wd_ / 2.0 + 0.01 and v.co.z <= wh_ + 0.01
+                 and v.co.x < -w / 2.0 + 0.15], SLOT_WALLS)
+    wing_rise = params["roof_pitch"] * wd_ / 2.0
+    _gable_prism(bm, ww_ / 2.0 + ov * 0.8, wd_ / 2.0 + ov * 0.8, wh_ - 0.02,
+                 wh_ + wing_rise, SLOT_ROOF, axis="x", center=(wing_cx, 0.0),
+                 gable_slot=SLOT_WALLS)
+    framed_opening((0.0, wh_ * 0.55), (win_w * 0.8, win_h * 0.75), "x", -1.0)
 
     common.base_center_origin(bm)
     common.finishing_pass(bm)
