@@ -151,3 +151,13 @@ panes on every window including the dormer. All ~460 unit tests green,
 plus new pure-Python tests for the color-word mapping. Keep every rubric
 check passing — S16/S17/A1 must not regress (thresholds in
 assetpipe/config/defaults.yaml).
+
+**MET (2026-07-07, branch `claude/colors-textures-q7snil`).** Two full
+agent-vision runs of the no-overrides request reached `validated`
+(iteration 2 shipped; iteration 1's S20d FILE_TOO_LARGE resolved by the
+priority-aware shrink): bake payload carried the derived roof params
+color1_hex #8A1E1E / color2_hex #6E1818 with `material_params: {}`;
+every R-check passed by real vision in both runs; the second run's
+beauty shot shows the oxblood roof, warm gold panes (dormer included),
+legible per-plank/per-tile variation at the shipped 512 albedo, and
+clearly visible moss on the plinth. 484 unit tests green.
