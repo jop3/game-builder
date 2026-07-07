@@ -11,7 +11,7 @@ from assetpipe.matlib import nodes, palette
 PARAM_SCHEMA = {
     "type": "object",
     "properties": {
-        "glow_strength": {"type": "number", "minimum": 0.5, "maximum": 6.0, "default": 3.0},
+        "glow_strength": {"type": "number", "minimum": 0.5, "maximum": 6.0, "default": 4.0},
         "pane_scale": {"type": "number", "minimum": 2.0, "maximum": 12.0, "default": 6.0},
     },
     "additionalProperties": False,

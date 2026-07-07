@@ -146,12 +146,50 @@ def generate_lods(obj: "bpy.types.Object", ratios: list[float], asset_id: str,
         lod_obj.name = f"{asset_id}_LOD{i}"
         export_coll.objects.link(lod_obj)
 
-        mod = lod_obj.modifiers.new(f"DecimateLOD{i}", 'DECIMATE')
-        mod.ratio = ratio
-        mod.use_collapse_triangulate = True
+        # Planar decimate first: on boxy/architectural assets it reaches the
+        # ratio by merging coplanar faces without ever collapsing thin parts
+        # (window frames, mullions) into non-manifold geometry -- collapse
+        # runs after, only for whatever reduction is still missing.
+        import math as _math
+
+        lod_obj.data.calc_loop_triangles()
+        orig_tris = len(lod_obj.data.loop_triangles)
+        planar = lod_obj.modifiers.new(f"PlanarLOD{i}", 'DECIMATE')
+        planar.decimate_type = 'DISSOLVE'
+        planar.angle_limit = _math.radians(8.0)
         deps = bpy.context.evaluated_depsgraph_get()
         lod_obj.data = bpy.data.meshes.new_from_object(lod_obj.evaluated_get(deps))
         lod_obj.modifiers.clear()
+        lod_obj.data.calc_loop_triangles()
+        if len(lod_obj.data.loop_triangles) > ratio * orig_tris:
+            mod = lod_obj.modifiers.new(f"DecimateLOD{i}", 'DECIMATE')
+            mod.ratio = ratio * orig_tris / len(lod_obj.data.loop_triangles)
+            mod.use_collapse_triangulate = True
+            deps = bpy.context.evaluated_depsgraph_get()
+            lod_obj.data = bpy.data.meshes.new_from_object(lod_obj.evaluated_get(deps))
+            lod_obj.modifiers.clear()
+
+        # Decimation is the top producer of degenerate slivers and
+        # non-manifold edges (blender-procedural-geometry skill) -- run the
+        # standard cleanup pass on the LOD before judging it, and fill any
+        # hole the sliver-dissolve opened in a closed mesh. Collapsing many
+        # thin parts (window frames, mullions) made LOD1 fail S1 without
+        # this (house, phase 2).
+        import bmesh
+        lbm = bmesh.new()
+        lbm.from_mesh(lod_obj.data)
+        bmesh.ops.remove_doubles(lbm, verts=lbm.verts, dist=1e-4)
+        bmesh.ops.dissolve_degenerate(lbm, edges=lbm.edges, dist=1e-5)
+        if topology == "closed":
+            boundary = [e for e in lbm.edges if e.is_boundary]
+            if boundary:
+                bmesh.ops.holes_fill(lbm, edges=boundary, sides=0)
+        bmesh.ops.recalc_face_normals(lbm, faces=lbm.faces)
+        bmesh.ops.triangulate(lbm, faces=lbm.faces, quad_method="BEAUTY",
+                              ngon_method="BEAUTY")
+        lbm.to_mesh(lod_obj.data)
+        lbm.free()
+        lod_obj.data.update()
 
         results = static_checks_mesh.run_all_checks(
             lod_obj, thresholds, topology=topology, budget=budget, lod_ratio=ratio)

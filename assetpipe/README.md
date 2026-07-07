@@ -83,14 +83,27 @@ and uncertainty policy as an API response.
   RMSE ≤ 2/255 tolerance); and the tiling_texture_set branch end-to-end
   (the `tiling/surface` unit-plane recipe, TILING material selection,
   periodic-domain verification in the bake).
+- **Verified (third pass, 2026-07): the vision tier end-to-end with real
+  vision** — no API key needed: the file-exchange agent client
+  (`vision/agent_client.py`) let an interactive Claude session BE the
+  inspector. Two full runs: the crate (vision correctly failed it and the
+  loop drove fix planning → escalation → best_effort + diagnosis, incl. the
+  uncertain-crop re-query round), and `env/house` (multi-material walls/
+  shingle-roof/emissive-window asset) through iteration-1 V1 fix →
+  iteration-2 all-checks-pass → `validated` → Godot deliver + verify green.
+  That pass caught and fixed five real bugs the scripted checks missed:
+  ground-plane-dominated camera framing, furniture painted into silhouette
+  views, raw-normal debug encoding colliding with the backface-red marker,
+  LOD siblings rendering co-located with the root mesh, and
+  `materials.clear()` silently zeroing every polygon's material_index.
 - **Still needs the real toolchain in CI:** a rendered-fixture corpus for
   §21.1's vision tier, and the real-API vision regression (§21.3 — this
-  container has no Anthropic API credentials; the vision stage is verified
-  against fakes only). skybox/background_2d have NO pipeline branch (stage
-  B is unimplemented); intake rejects them with `NOT_IMPLEMENTED` so no
-  iterations are consumed — the render harness's skybox views, the sky
-  fixes, and the Godot adapter's skybox/background delivery are already in
-  place for when stage B lands.
+  container has no Anthropic API credentials; the API transport is verified
+  against fakes, the judgement tier via the agent client). skybox/
+  background_2d have NO pipeline branch (stage B is unimplemented); intake
+  rejects them with `NOT_IMPLEMENTED` so no iterations are consumed — the
+  render harness's skybox views, the sky fixes, and the Godot adapter's
+  skybox/background delivery are already in place for when stage B lands.
 
 ## Invariants to preserve
 

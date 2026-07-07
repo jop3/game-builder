@@ -33,8 +33,11 @@ def build(nt, params: dict, rng, palette_dict: dict) -> None:
     stone.node_tree = nodes.stone_base()
     nt.links.new(periodic.outputs["Vector"], stone.inputs["Vector"])
     stone.inputs["Cell Scale"].default_value = params["cell_scale"]
-    r, g, b = palette.sample_palette_color(palette_dict, "primary", rng)
-    stone.inputs["Base Color"].default_value = (r, g, b, 1.0)
+    # ``secondary`` holds the theme's stone greys; ``primary`` is the timber
+    # browns and made stonework read as warm sand (house plinth, phase 4).
+    # Darkened toward the reference's grey cobbles.
+    r, g, b = palette.sample_palette_color(palette_dict, "secondary", rng)
+    stone.inputs["Base Color"].default_value = (r * 0.72, g * 0.74, b * 0.78, 1.0)
 
     bump = nt.nodes.new("ShaderNodeBump")
     bump.inputs["Strength"].default_value = 0.3

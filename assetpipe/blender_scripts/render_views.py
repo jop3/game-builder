@@ -269,10 +269,24 @@ def render_mesh_views(scene, category: str, out_dir: Path) -> list[str]:
     # and the asset renders at ~0.1% of the frame (found by the first real
     # vision-tier verification, 2026-07).
     asset_objects = list(bpy.data.objects)
+    # LOD siblings ride along in the export (spec 8.4) co-located with the
+    # root mesh -- rendering them too makes the decimated LOD surface z-fight
+    # and occlude the full-res mesh (found by the house vision run: black
+    # walls and phantom shadows; the crate's "diagonal split face" was the
+    # same collision). Hide them and keep them out of the framing bbox.
+    lods = [o for o in asset_objects if "_LOD" in o.name]
+    for lod in lods:
+        lod.hide_render = True
+    asset_objects = [o for o in asset_objects if o not in lods]
     ground = add_ground_plane()
-    ref_cube = add_reference_cube()
-    cam_obj = setup_camera()
     bbox_min, bbox_max = compute_bbox(asset_objects)
+    # The 1 m reference cube stands 1.5 m to the asset's LEFT (spec 14.2) --
+    # measured from the asset's bbox face, not from the origin, or any asset
+    # wider than 3 m swallows the cube (the house did).
+    ref_cube = add_reference_cube(
+        offset_m=abs(float(bbox_min.x)) + views.REFERENCE_CUBE_OFFSET_M
+        + views.REFERENCE_CUBE_SIZE_M / 2.0)
+    cam_obj = setup_camera()
     ref_min, ref_max = compute_bbox([ref_cube])
     # R6 (scale plausibility) is judged against the reference cube in
     # turn_000/turn_090 (spec 14.2), so those two views widen the framing to
