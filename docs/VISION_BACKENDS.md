@@ -42,9 +42,19 @@ OpenAI, Gemini's OpenAI-compat endpoint, OpenRouter, and local servers
         --vision-base-url https://generativelanguage.googleapis.com/v1beta/openai \
         --vision-model gemini-3-flash
 
-    # Local vLLM / Ollama
+    # Local vLLM / Ollama (fully offline V2 -- nothing leaves the machine)
+    ollama pull qwen2.5vl
     python -m assetpipe generate ... --vision-client openai \
-        --vision-base-url http://localhost:11434/v1 --vision-model llama4-vision
+        --vision-base-url http://localhost:11434/v1 --vision-model qwen2.5vl
+
+Local-model notes: this is the same idea as LocalEyes-style local-vision
+bridges, but native — the local model gets the full rubric prompt, the
+forced tool schema, and the crop re-query, not a free-text description
+hop. Resolution is actually a local strength (no provider-side downscale;
+Qwen-VL-family ViTs take native-resolution input), while JUDGEMENT is the
+weak spot: expect small models to lean on the corrective retry and land
+more assets `best_effort`. Qualify one on a labeled run before trusting a
+batch (see the fixture-corpus note at the bottom).
 
 Config equivalents: `vision.base_url`, `vision.api_key_env` (name of the
 env var holding the key; default `OPENAI_API_KEY`), `vision.request_timeout_s`.
