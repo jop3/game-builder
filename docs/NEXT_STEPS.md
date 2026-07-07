@@ -1,7 +1,7 @@
 # Next steps — resuming work on the asset pipeline
 
-Last updated: 2026-07-06, end of the real-toolchain verification waves
-(branch `claude/project-wave-1-enzr2m`, commits `ef56087..`).
+Last updated: 2026-07-07, end of the vision-tier verification wave
+(branch `claude/vision-verification-9xdrpd`).
 
 ## Getting a fresh session going (~5–10 minutes, one command)
 
@@ -56,8 +56,23 @@ Everything in `assetpipe/README.md`'s module map is built, and the
   `verify_import.gd` green;
 - §21.2 determinism: same-seed runs are byte-identical through G and M.
 
-The vision stage (V2) is only verified against **fake clients** — these
-containers have no Anthropic API credentials.
+The vision tier (V2) has now been verified end-to-end with REAL vision and
+no API key (2026-07-07, branch `claude/vision-verification-9xdrpd`): the
+file-exchange agent client (`assetpipe/vision/agent_client.py`,
+`--vision-client agent --vision-exchange <dir>`) blocks each vision call
+while dumping prompt + renders to `call_NNNN/`; the driving Claude session
+inspects the images with its own vision and writes the `report_inspection`
+tool input to `report.json`, which then flows through the unchanged
+semantic validation / two-view rule / crop re-query. Two full runs: the
+crate (correctly failed; fix planning, escalation, best_effort + diagnosis
+all exercised) and `env/house` — a NEW three-slot multi-material recipe
+(aged-wood walls, shingle roof, emissive windows) — which reached
+`validated` and passed Godot deliver+verify. Vision inspection caught five
+real bugs the scripted checks missed (all fixed): ground-plane framing,
+silhouette furniture, raw-normal/backface-red collision, LOD siblings
+z-fighting the root mesh, and `materials.clear()` zeroing polygon
+material indices. Only the API *transport* (`inspector.py`'s retry/backoff
+against the real endpoint) still needs an `ANTHROPIC_API_KEY` run.
 
 ## Prioritized next work
 
@@ -72,13 +87,19 @@ containers have no Anthropic API credentials.
    stages branch that runs B→R→V2 (no G/M/X, no glb), theme sky recipes,
    then remove the intake gate. Spec §11 + §16.2's sky fixes define the
    contracts.
-2. **Vision tier with the real API** (spec §21.3) — needs a session/CI
-   environment with `ANTHROPIC_API_KEY`. First: one `inspect` call on the
-   committed-quality renders (e.g. re-render the crate) to shake out the
-   call shape against the live API; then the labeled fixture corpus
-   (§21.1 rendered fault fixtures) and the ≥90%-catch / 0-blocker-FP
-   regression. `assetpipe/tests/test_inspector.py`'s fakes document the
-   expected response shapes.
+2. **Vision transport with the real API** (spec §21.3) — needs a session/
+   CI environment with `ANTHROPIC_API_KEY`. The judgement tier is verified
+   (agent client, see above); what remains is the live-endpoint call shape
+   + retry policy, then the labeled fixture corpus (§21.1 rendered fault
+   fixtures) and the ≥90%-catch / 0-blocker-FP regression.
+   `assetpipe/tests/test_inspector.py`'s fakes document the expected
+   response shapes.
+   Quality follow-ups from the house run: material selection should honor
+   description color words ("red shingled roof" sampled the gold accent);
+   wall materials could use plank/beam relief; the dormer roof leaves a
+   small notch at the main ridge; A1's min-std floor false-positives on a
+   flat-faced asset filling the frame (crate turn_270) — consider a
+   per-view or texture-aware floor.
 3. **CI wiring** — a workflow that runs the pure-Python suite per-commit,
    plus a manual/nightly job that runs `scripts/setup_toolchain.sh` and
    the two e2e smokes (crate, tiling). The smoke driver pattern lives in
@@ -118,3 +139,9 @@ containers have no Anthropic API credentials.
   continuous noise only.
 - The scripted A-checks must mirror the vision prompt's exemptions
   (`lit_dark_*` is dark by design → separate A1 mean floor).
+- `mesh.materials.clear()` RESETS every `polygon.material_index` to 0
+  (real Blender 4.2) — snapshot + restore around slot replacement
+  (see `bake.bake_all_maps`), or multi-material assets silently flatten.
+- The render harness must hide `*_LOD*` siblings (they're co-located with
+  the root mesh and z-fight it) and place the reference cube relative to
+  the asset's bbox, not the origin (a >3 m asset swallows it).
