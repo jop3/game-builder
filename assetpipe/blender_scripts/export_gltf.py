@@ -146,12 +146,28 @@ def generate_lods(obj: "bpy.types.Object", ratios: list[float], asset_id: str,
         lod_obj.name = f"{asset_id}_LOD{i}"
         export_coll.objects.link(lod_obj)
 
-        mod = lod_obj.modifiers.new(f"DecimateLOD{i}", 'DECIMATE')
-        mod.ratio = ratio
-        mod.use_collapse_triangulate = True
+        # Planar decimate first: on boxy/architectural assets it reaches the
+        # ratio by merging coplanar faces without ever collapsing thin parts
+        # (window frames, mullions) into non-manifold geometry -- collapse
+        # runs after, only for whatever reduction is still missing.
+        import math as _math
+
+        lod_obj.data.calc_loop_triangles()
+        orig_tris = len(lod_obj.data.loop_triangles)
+        planar = lod_obj.modifiers.new(f"PlanarLOD{i}", 'DECIMATE')
+        planar.decimate_type = 'DISSOLVE'
+        planar.angle_limit = _math.radians(8.0)
         deps = bpy.context.evaluated_depsgraph_get()
         lod_obj.data = bpy.data.meshes.new_from_object(lod_obj.evaluated_get(deps))
         lod_obj.modifiers.clear()
+        lod_obj.data.calc_loop_triangles()
+        if len(lod_obj.data.loop_triangles) > ratio * orig_tris:
+            mod = lod_obj.modifiers.new(f"DecimateLOD{i}", 'DECIMATE')
+            mod.ratio = ratio * orig_tris / len(lod_obj.data.loop_triangles)
+            mod.use_collapse_triangulate = True
+            deps = bpy.context.evaluated_depsgraph_get()
+            lod_obj.data = bpy.data.meshes.new_from_object(lod_obj.evaluated_get(deps))
+            lod_obj.modifiers.clear()
 
         # Decimation is the top producer of degenerate slivers and
         # non-manifold edges (blender-procedural-geometry skill) -- run the
