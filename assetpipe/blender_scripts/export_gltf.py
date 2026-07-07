@@ -153,6 +153,28 @@ def generate_lods(obj: "bpy.types.Object", ratios: list[float], asset_id: str,
         lod_obj.data = bpy.data.meshes.new_from_object(lod_obj.evaluated_get(deps))
         lod_obj.modifiers.clear()
 
+        # Decimation is the top producer of degenerate slivers and
+        # non-manifold edges (blender-procedural-geometry skill) -- run the
+        # standard cleanup pass on the LOD before judging it, and fill any
+        # hole the sliver-dissolve opened in a closed mesh. Collapsing many
+        # thin parts (window frames, mullions) made LOD1 fail S1 without
+        # this (house, phase 2).
+        import bmesh
+        lbm = bmesh.new()
+        lbm.from_mesh(lod_obj.data)
+        bmesh.ops.remove_doubles(lbm, verts=lbm.verts, dist=1e-4)
+        bmesh.ops.dissolve_degenerate(lbm, edges=lbm.edges, dist=1e-5)
+        if topology == "closed":
+            boundary = [e for e in lbm.edges if e.is_boundary]
+            if boundary:
+                bmesh.ops.holes_fill(lbm, edges=boundary, sides=0)
+        bmesh.ops.recalc_face_normals(lbm, faces=lbm.faces)
+        bmesh.ops.triangulate(lbm, faces=lbm.faces, quad_method="BEAUTY",
+                              ngon_method="BEAUTY")
+        lbm.to_mesh(lod_obj.data)
+        lbm.free()
+        lod_obj.data.update()
+
         results = static_checks_mesh.run_all_checks(
             lod_obj, thresholds, topology=topology, budget=budget, lod_ratio=ratio)
         failures = [r for r in results if r["verdict"] == "fail" and r["severity"] == "blocker"]

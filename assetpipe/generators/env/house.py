@@ -135,19 +135,83 @@ def generate(params: dict, rng, theme: dict):
     for f in bm.faces:
         f.material_index = SLOT_WALLS
 
-    # --- main roof: overhanging gable prism, ridge along X. Base sits
-    # slightly below the wall top so the shared plane is never coplanar
-    # (z-fighting, R8) while the sink stays intentional interpenetration.
+    # --- main roof (roadmap phase 2): the gable prism fills the volume, and
+    # two THICK slope slabs laid over it give the reference's visible roof
+    # thickness, fascia edge, and deeper eaves. A ridge beam caps the top.
+    # The prism base sits slightly below the wall top so the shared plane is
+    # never coplanar (z-fighting, R8).
+    import math
+
+    from mathutils import Matrix
+
     _gable_prism(bm, w / 2.0 + ov, d / 2.0 + ov, h - 0.03, h + rise, SLOT_ROOF, axis="x")
+    slope_half_d = d / 2.0 + ov
+    slope_len = math.hypot(slope_half_d, rise) + 0.18
+    pitch = math.atan2(rise, slope_half_d)
+    for side in (1.0, -1.0):
+        slab = bmesh.ops.create_cube(bm, size=1.0)
+        bmesh.ops.scale(bm, verts=slab["verts"], vec=(w + 2 * ov + 0.15, slope_len, 0.12))
+        bmesh.ops.rotate(bm, verts=slab["verts"], cent=(0, 0, 0),
+                         matrix=Matrix.Rotation(side * pitch, 3, 'X'))
+        mid_y = side * slope_half_d / 2.0
+        bmesh.ops.translate(bm, verts=slab["verts"],
+                            vec=(0.0, mid_y, h + rise / 2.0 + 0.02))
+        _assign(bm, slab["verts"], SLOT_ROOF)
+    _box(bm, (w + 2 * ov + 0.2, 0.16, 0.14), (0.0, 0.0, h + rise + 0.05), SLOT_ROOF)
 
-    # --- door: slab half-sunk into the +X gable wall.
-    door_w, door_t, door_h = 0.95, 0.10, 1.9
-    _box(bm, (door_t, door_w, door_h), (w / 2.0, rng.uniform(-0.15, 0.15), door_h / 2.0),
-         SLOT_WALLS)
+    def framed_opening(center, size_wh, normal_axis: str, sign: float,
+                       hood: bool = False, glass: bool = True) -> None:
+        """A framed pane half-sunk into a wall: 4 frame bars (walls slot),
+        recessed glass pane, cross mullions, optional shingled hood above --
+        the reference's window language. ``normal_axis`` is the wall's facing
+        axis ('x' or 'y'); ``center`` is (along, z) on that wall plane."""
+        along, cz = center
+        ww, wh = size_wh
+        bar = 0.09
+        frame_t, pane_t = 0.14, 0.07
 
-    # --- windows: glowing slabs half-sunk into the long (+/-Y) walls,
-    # spread along X with a little rng jitter.
-    win_w, win_t, win_h = 0.85, 0.10, 0.95
+        def place(sz_along, sz_z, thick, o_along, o_z, slot):
+            if normal_axis == "y":
+                size, cen = (sz_along, thick, sz_z), (along + o_along, sign * d / 2.0, cz + o_z)
+            else:
+                size, cen = (thick, sz_along, sz_z), (sign * w / 2.0, along + o_along, cz + o_z)
+            _box(bm, size, cen, slot)
+
+        place(ww + 2 * bar, bar, frame_t, 0, wh / 2.0 + bar / 2.0, SLOT_WALLS)   # head
+        place(ww + 2 * bar, bar, frame_t, 0, -wh / 2.0 - bar / 2.0, SLOT_WALLS)  # sill
+        place(bar, wh, frame_t, -(ww + bar) / 2.0, 0, SLOT_WALLS)                # jambs
+        place(bar, wh, frame_t, (ww + bar) / 2.0, 0, SLOT_WALLS)
+        if glass:
+            place(ww, wh, pane_t, 0, 0, SLOT_GLASS)                              # pane
+            place(bar * 0.6, wh, frame_t * 0.9, 0, 0, SLOT_WALLS)                # mullions
+            place(ww, bar * 0.6, frame_t * 0.9, 0, 0, SLOT_WALLS)
+        if hood:
+            hw = ww + 2 * bar + 0.16
+            hd = 0.34
+            hood_part = bmesh.ops.create_cube(bm, size=1.0)
+            bmesh.ops.scale(bm, verts=hood_part["verts"], vec=(hw, hd, 0.09))
+            tilt = Matrix.Rotation(-sign * 0.5, 3, 'X') if normal_axis == "y" \
+                else Matrix.Rotation(sign * 0.5, 3, 'Y')
+            bmesh.ops.rotate(bm, verts=hood_part["verts"], cent=(0, 0, 0), matrix=tilt)
+            if normal_axis == "y":
+                cen = (along, sign * (d / 2.0 + hd * 0.32), cz + wh / 2.0 + bar + 0.12)
+            else:
+                cen = (sign * (w / 2.0 + hd * 0.32), along, cz + wh / 2.0 + bar + 0.12)
+                bmesh.ops.rotate(bm, verts=hood_part["verts"], cent=(0, 0, 0),
+                                 matrix=Matrix.Rotation(math.pi / 2.0, 3, 'Z'))
+            bmesh.ops.translate(bm, verts=hood_part["verts"], vec=cen)
+            _assign(bm, hood_part["verts"], SLOT_ROOF)
+
+    # --- door on the +X gable: framed plank slab + stone-grey step.
+    door_w, door_h = 0.95, 1.9
+    door_y = rng.uniform(-0.15, 0.15)
+    framed_opening((door_y, door_h / 2.0), (door_w, door_h), "x", 1.0, glass=False)
+    _box(bm, (0.12, door_w, door_h), (w / 2.0, door_y, door_h / 2.0), SLOT_WALLS)
+    _box(bm, (0.5, door_w + 0.3, 0.12), (w / 2.0 + 0.18, door_y, 0.06), SLOT_WALLS)
+
+    # --- windows: framed glowing panes on the long (+/-Y) walls; the first
+    # (front) window gets the reference's shingled hood.
+    win_w, win_h = 0.85, 0.95
     sill_z = 1.15
     n = params["n_windows"]
     sides = [1.0, -1.0] * 2
@@ -158,28 +222,27 @@ def generate(params: dict, rng, theme: dict):
         x = (idx + 1) / (slots_along + 1) * w - w / 2.0
         x += rng.uniform(-0.08, 0.08)
         x = max(-w / 2.0 + win_w, min(w / 2.0 - win_w, x))
-        _box(bm, (win_w, win_t, win_h), (x, side * d / 2.0, sill_z + win_h / 2.0),
-             SLOT_GLASS)
+        framed_opening((x, sill_z + win_h / 2.0), (win_w, win_h), "y", side,
+                       hood=(i == 0))
 
-    # --- dormer: small gabled box poking out of one roof slope, with its
-    # own glass pane on the outward face.
+    # --- dormer: gabled box on one roof slope with a framed pane.
     if params["dormer"]:
         side = rng.choice([1.0, -1.0])
         dw, dd, dh = 1.0, 1.1, 0.85
-        slope_half_d = d / 2.0 + ov
         y_c = side * slope_half_d * 0.45
-        # z of the slope surface at |y| = |y_c|, then sink the box base into it
         z_surface = h + rise * (1.0 - abs(y_c) / slope_half_d)
         z_base = z_surface - dh * 0.55
         dx = rng.uniform(-w * 0.15, w * 0.15)
         _box(bm, (dw, dd, dh), (dx, y_c, z_base + dh / 2.0), SLOT_WALLS)
-        # dormer roof: mini prism, ridge along Y (pointing down the slope)
-        _gable_prism(bm, dw / 2.0 + 0.08, dd / 2.0 + 0.08, z_base + dh - 0.02,
-                     z_base + dh + 0.4, SLOT_ROOF, axis="y", center=(dx, y_c))
-        # dormer window pane on the outward (+/-Y) face
+        _gable_prism(bm, dw / 2.0 + 0.1, dd / 2.0 + 0.12, z_base + dh - 0.02,
+                     z_base + dh + 0.42, SLOT_ROOF, axis="y", center=(dx, y_c))
         pane_y = y_c + side * (dd / 2.0)
-        _box(bm, (dw * 0.6, win_t, dh * 0.55), (dx, pane_y, z_base + dh * 0.5),
+        _box(bm, (dw * 0.55, 0.07, dh * 0.5), (dx, pane_y, z_base + dh * 0.5),
              SLOT_GLASS)
+        _box(bm, (dw * 0.55 + 0.12, 0.12, 0.08),
+             (dx, pane_y, z_base + dh * 0.5 + dh * 0.25 + 0.04), SLOT_WALLS)
+        _box(bm, (dw * 0.55 + 0.12, 0.12, 0.08),
+             (dx, pane_y, z_base + dh * 0.5 - dh * 0.25 - 0.04), SLOT_WALLS)
 
     common.base_center_origin(bm)
     common.finishing_pass(bm)
