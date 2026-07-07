@@ -45,17 +45,17 @@ vision, tune, commit.
 
 ## Phase 4 — Scene dressing (reuse existing generators as parts)
 
-- [ ] Barrels: 2–3 scaled `props/barrel` bodies clustered at a wall.
-- [ ] Lantern: bracket + small emissive cage (reuse `props/lantern` shapes)
+- [x] Barrels: 2–3 scaled `props/barrel` bodies clustered at a wall.
+- [x] Lantern: bracket + small emissive cage (reuse `props/lantern` shapes)
       hanging by the door gable.
-- [ ] Stone plinth: low cylinder disc under the footprint,
+- [x] Stone plinth: low cylinder disc under the footprint,
       `fantasy_stone_wall` slot; doorstep merges into it.
-- [ ] Budget check: this phase is the first credible threat to 3000 tris —
+- [x] Budget check: this phase is the first credible threat to 3000 tris —
       measure before polishing.
 
 ## Phase 5 — Presentation (optional, out of validation scope)
 
-- [ ] `beauty_dark` render view: black background, low ambient, emissives
+- [x] `beauty_dark` render view: black background, low ambient, emissives
       dominant — the reference's presentation style. Extra view only; not
       judged by the rubric, excluded from A-checks.
 
