@@ -35,7 +35,7 @@ vision, tune, commit.
 
 ## Phase 3 — Massing & surface relief
 
-- [ ] Two-mass build: main tall gable volume + attached lower wing with its
+- [x] Two-mass build: main tall gable volume + attached lower wing with its
       own roof (param `wing: 0|1`, sizes relative to main).
 - [x] Wall plank relief: corner posts + horizontal beam at storey line +
       subtle per-board depth (inset strips), so silhouettes stop reading as
