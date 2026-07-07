@@ -94,12 +94,13 @@ against the real endpoint) still needs an `ANTHROPIC_API_KEY` run.
    fixtures) and the ≥90%-catch / 0-blocker-FP regression.
    `assetpipe/tests/test_inspector.py`'s fakes document the expected
    response shapes.
-   Quality follow-ups from the house run: material selection should honor
-   description color words ("red shingled roof" sampled the gold accent);
-   wall materials could use plank/beam relief; the dormer roof leaves a
-   small notch at the main ridge; A1's min-std floor false-positives on a
-   flat-faced asset filling the frame (crate turn_270) — consider a
-   per-view or texture-aware floor.
+   Quality follow-ups from the house run: material selection honoring
+   description color words is DONE (2026-07-07, branch
+   `claude/colors-textures-q7snil`: `matlib/color_words.py`, status in
+   docs/COLOR_WAVE.md); wall materials could use plank/beam relief; the
+   dormer roof leaves a small notch at the main ridge; A1's min-std floor
+   false-positives on a flat-faced asset filling the frame (crate
+   turn_270) — consider a per-view or texture-aware floor.
 3. **CI wiring** — a workflow that runs the pure-Python suite per-commit,
    plus a manual/nightly job that runs `scripts/setup_toolchain.sh` and
    the two e2e smokes (crate, tiling). The smoke driver pattern lives in

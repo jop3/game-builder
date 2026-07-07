@@ -7,6 +7,44 @@ INTELLIGENCE (requests should not need hand-written hex overrides) and
 making the painted detail SURVIVE the web budget. This file is
 self-contained for a fresh session.
 
+## Status (2026-07-07, branch `claude/colors-textures-q7snil`)
+
+Items 1-5 LANDED; the acceptance run passed (see the section at the bottom
+for what was verified). Item-by-item notes for whoever continues:
+
+1. **Description-driven color** -- `assetpipe/matlib/color_words.py` (pure
+   Python; tests in `test_color_words.py`): lexicon -> noun binding
+   (2-token window before roof/wall/door/window/trim/banner/plinth) ->
+   HSV-nearest palette snap over primary/secondary/accent (hue weighted 6x
+   mean saturation; tolerance 0.5; raw-anchor fallback jittered through
+   the spec-10.5 bounds) -> slot params via the item-6 plumbing, injected
+   in `stages._material_recipes`. Derivation is WITHHELD for a slot when
+   the request's `material_overrides` pins any of the same keys (slot
+   params beat the request dict in bake.py, so emitting would invert
+   "explicit overrides win"). aged_wood/stone_wall/iron_trim/cloth_banner
+   now accept `color1_hex` (+`color2_hex` where used) so color words work
+   beyond the roof.
+2. **Priority-aware shrink_textures** -- normal+orm halve first (256 px
+   soft floor), then albedo, emissive last; a 64 px hard pass keeps the
+   loop convergent. Seed-77 real numbers: 6.8 MiB glb -> normal/orm
+   1024->256, albedo 1024->512 (its 1024 PNG is 4.8 MiB, alone over the
+   3 MiB cap -- no ordering can save it), emissive kept at 512 ->
+   0.84 MiB shipped. The window read survives untouched.
+3. **Moss/plinth** -- moss noise scale 2.0, plinth slot moss 0.55, grout
+   From Max 0.085, and (after the first validated run still read
+   grey-brown) a greener/deeper moss mix: ramp 0.50/0.68, mix factor
+   `params["moss"]` undamped, target (base*0.32, *0.78, *0.22) -- still
+   derived from the sampled secondary grey, so palette-traceable. Item 6
+   (a real palette green) stays unnecessary.
+4. **Window glow** -- bias_var To Max 1.35 -> 1.2; the dormer pane now
+   bakes gold like the main windows. The lantern still shares
+   SLOT_GLASS/window material (acceptable, unchanged).
+5. **Painted trim/banner** -- iron_trim: per-segment cell_jitter value
+   jitter + base-tinted edge highlights (+`edge_highlight` param);
+   cloth_banner: per-patch dye jitter + noise-broken sun-fade height
+   gradient (+`sun_fade` param). Verified graph-build in real Blender;
+   not yet exercised by a generator recipe.
+
 ## Bootstrap (~10 min)
 
     bash scripts/setup_toolchain.sh && export PATH=/opt/toolchain/bin:$PATH

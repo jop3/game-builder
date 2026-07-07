@@ -104,20 +104,24 @@ def build(nt, params: dict, rng, palette_dict: dict) -> None:
     nt.links.new(periodic.outputs["Vector"], moss_noise.inputs["Vector"])
     moss_noise.inputs["Scale"].default_value = 2.0
     moss_noise.inputs["Detail"].default_value = 4.0
+    # Ramp widened (0.50/0.68) and mix deepened (drop the 0.8 damping,
+    # greener target): at the shipped 512 albedo the old dark-olive moss
+    # read as plain grey-brown in beauty/turn renders (COLOR_WAVE item 3;
+    # still derived from the sampled grey, so palette-traceable).
     moss_ramp = nt.nodes.new("ShaderNodeValToRGB")
-    moss_ramp.color_ramp.elements[0].position = 0.52
-    moss_ramp.color_ramp.elements[1].position = 0.72
+    moss_ramp.color_ramp.elements[0].position = 0.50
+    moss_ramp.color_ramp.elements[1].position = 0.68
     nt.links.new(moss_noise.outputs["Fac"], moss_ramp.inputs["Fac"])
     moss_fac = nt.nodes.new("ShaderNodeMath")
     moss_fac.operation = "MULTIPLY"
     nt.links.new(moss_ramp.outputs["Color"], moss_fac.inputs[0])
-    moss_fac.inputs[1].default_value = params["moss"] * 0.8
+    moss_fac.inputs[1].default_value = params["moss"]
     mossed = nt.nodes.new("ShaderNodeMix")
     mossed.data_type = "RGBA"
     nt.links.new(moss_fac.outputs[0], mossed.inputs[0])
     nt.links.new(tinted.outputs[2], mossed.inputs[6])
-    mossed.inputs[7].default_value = (base[0] * 0.5, base[1] * 0.72,
-                                      base[2] * 0.38, 1.0)
+    mossed.inputs[7].default_value = (base[0] * 0.32, base[1] * 0.78,
+                                      base[2] * 0.22, 1.0)
 
     # Dark grout lines over everything (moss survives only on the stones).
     grout = nt.nodes.new("ShaderNodeMix")
