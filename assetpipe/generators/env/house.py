@@ -73,10 +73,12 @@ def _box(bm, size_xyz, center_xyz, slot: int):
 
 
 def _gable_prism(bm, half_w, half_d, z_base, z_ridge, slot: int,
-                 axis: str = "x", center=(0.0, 0.0)):
+                 axis: str = "x", center=(0.0, 0.0), gable_slot: int | None = None):
     """Closed 6-vert triangular prism: rectangular base at ``z_base``, ridge
     line at ``z_ridge`` running along ``axis`` through the base's center.
-    The primitive roof shape -- manifold by construction (5 faces)."""
+    The primitive roof shape -- manifold by construction (5 faces).
+    ``gable_slot`` overrides the material for the two triangular end faces
+    (the reference language: shingled slopes, plank gable ends)."""
     cx, cy = center
     if axis == "x":
         base = [(-half_w, -half_d), (half_w, -half_d), (half_w, half_d), (-half_w, half_d)]
@@ -87,19 +89,23 @@ def _gable_prism(bm, half_w, half_d, z_base, z_ridge, slot: int,
     verts = [bm.verts.new((cx + x, cy + y, z_base)) for x, y in base]
     r0, r1 = (bm.verts.new((cx + x, cy + y, z_ridge)) for x, y in ridge)
     b0, b1, b2, b3 = verts
-    bm.faces.new((b0, b1, b2, b3))          # bottom
+    gables = []
+    bm.faces.new((b0, b1, b2, b3))                    # bottom
     if axis == "x":
-        bm.faces.new((b0, b1, r1, r0))      # slope -Y
-        bm.faces.new((b3, b2, r1, r0))      # slope +Y
-        bm.faces.new((b0, b3, r0))          # gable -X
-        bm.faces.new((b1, b2, r1))          # gable +X
+        bm.faces.new((b0, b1, r1, r0))                # slope -Y
+        bm.faces.new((b3, b2, r1, r0))                # slope +Y
+        gables.append(bm.faces.new((b0, b3, r0)))     # gable -X
+        gables.append(bm.faces.new((b1, b2, r1)))     # gable +X
     else:
-        bm.faces.new((b0, b3, r1, r0))      # slope -X
-        bm.faces.new((b1, b2, r1, r0))      # slope +X
-        bm.faces.new((b0, b1, r0))          # gable -Y
-        bm.faces.new((b3, b2, r1))          # gable +Y
+        bm.faces.new((b0, b3, r1, r0))                # slope -X
+        bm.faces.new((b1, b2, r1, r0))                # slope +X
+        gables.append(bm.faces.new((b0, b1, r0)))     # gable -Y
+        gables.append(bm.faces.new((b3, b2, r1)))     # gable +Y
     part = verts + [r0, r1]
     _assign(bm, part, slot)
+    if gable_slot is not None:
+        for f in gables:
+            f.material_index = gable_slot
     return part
 
 
@@ -144,7 +150,8 @@ def generate(params: dict, rng, theme: dict):
 
     from mathutils import Matrix
 
-    _gable_prism(bm, w / 2.0 + ov, d / 2.0 + ov, h - 0.03, h + rise, SLOT_ROOF, axis="x")
+    _gable_prism(bm, w / 2.0 + ov, d / 2.0 + ov, h - 0.03, h + rise, SLOT_ROOF, axis="x",
+                 gable_slot=SLOT_WALLS)
     slope_half_d = d / 2.0 + ov
     slope_len = math.hypot(slope_half_d, rise) + 0.18
     pitch = math.atan2(rise, slope_half_d)
@@ -243,7 +250,8 @@ def generate(params: dict, rng, theme: dict):
         dx = rng.uniform(-w * 0.15, w * 0.15)
         _box(bm, (dw, dd, dh), (dx, y_c, z_base + dh / 2.0), SLOT_WALLS)
         _gable_prism(bm, dw / 2.0 + 0.1, dd / 2.0 + 0.12, z_base + dh - 0.02,
-                     z_base + dh + 0.42, SLOT_ROOF, axis="y", center=(dx, y_c))
+                     z_base + dh + 0.42, SLOT_ROOF, axis="y", center=(dx, y_c),
+                     gable_slot=SLOT_WALLS)
         pane_y = y_c + side * (dd / 2.0)
         _box(bm, (dw * 0.55, 0.07, dh * 0.5), (dx, pane_y, z_base + dh * 0.5),
              SLOT_GLASS)
