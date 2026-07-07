@@ -25,12 +25,12 @@ vision, tune, commit.
 
 ## Phase 2 — Read-at-a-glance architecture (framing & thickness)
 
-- [ ] Roof thickness: build slopes as slabs (solidified prism) with fascia
+- [x] Roof thickness: build slopes as slabs (solidified prism) with fascia
       boards and a ridge cap beam; deepen the overhang.
-- [ ] Framed windows: frame border (4 bars), recessed pane, cross mullions
+- [x] Framed windows: frame border (4 bars), recessed pane, cross mullions
       (2 crossing bars, wall material), shingled hood above the main window.
-- [ ] Door: frame + plank door slab + stone doorstep (stone material slot).
-- [ ] Dormer v2: gabled face flush with the roof plane (integrated look),
+- [x] Door: frame + plank door slab + stone doorstep (stone material slot).
+- [x] Dormer v2: gabled face flush with the roof plane (integrated look),
       framed pane, its own overhanging mini roof.
 
 ## Phase 3 — Massing & surface relief
