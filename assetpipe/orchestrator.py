@@ -122,7 +122,8 @@ def _populate_final(asset_dir: Path, run_dir: RunDir, request: dict, result) -> 
 
 def _run_one_asset(request: dict, run_dir: RunDir, contracts: Contracts, config: dict,
                    registry: Registry, blender_bin: str, runner: Callable,
-                   vision_client_factory: Callable | None, clock: Callable[[], float]) -> dict:
+                   vision_client_factory: Callable | None, clock: Callable[[], float],
+                   scout_client_factory: Callable | None = None) -> dict:
     """Drive one asset's repair loop end to end. Never raises: any exception
     is caught and turned into a ``hard_failed`` manifest entry so the batch
     continues (spec 16.5.4, 22)."""
@@ -140,10 +141,12 @@ def _run_one_asset(request: dict, run_dir: RunDir, contracts: Contracts, config:
             param_schema = getattr(registry.get(generator), "PARAM_SCHEMA", {})
 
         vision_client = vision_client_factory() if vision_client_factory else None
+        scout_client = scout_client_factory() if scout_client_factory else None
         stages = SubprocessStages(request=request, run_dir=run_dir, contracts=contracts,
                                   config=config, theme=theme, param_schema=param_schema,
                                   registry=registry, blender_bin=blender_bin, runner=runner,
-                                  vision_client=vision_client, history=history)
+                                  vision_client=vision_client, history=history,
+                                  scout_client=scout_client)
 
         result = run_asset_loop(request, stages, contracts, _loop_config(config), clock)
 
@@ -170,7 +173,8 @@ def run_batch(batch_path: Path, out_root: Path, *, config: dict | None = None,
              blender_bin: str = "blender", runner: Callable = None,
              vision_client_factory: Callable | None = None,
              clock: Callable[[], float] = time.monotonic,
-             parallel: int | None = None) -> dict:
+             parallel: int | None = None,
+             scout_client_factory: Callable | None = None) -> dict:
     """Run every asset in ``batch_path`` and return the final run manifest
     (also persisted at ``<out_root>/<run_id>/run_manifest.json``)."""
     import subprocess as _subprocess
@@ -228,7 +232,8 @@ def run_batch(batch_path: Path, out_root: Path, *, config: dict | None = None,
         with ThreadPoolExecutor(max_workers=max(1, max_workers)) as pool:
             futures = {
                 pool.submit(_run_one_asset, req, run_dir, contracts, cfg, registry,
-                           blender_bin, runner, vision_client_factory, clock): req["asset_id"]
+                           blender_bin, runner, vision_client_factory, clock,
+                           scout_client_factory): req["asset_id"]
                 for req in accepted
             }
             for fut in as_completed(futures):
@@ -245,7 +250,8 @@ def run_batch(batch_path: Path, out_root: Path, *, config: dict | None = None,
 
 def resume_run(run_root: Path, *, config: dict | None = None, blender_bin: str = "blender",
               runner: Callable = None, vision_client_factory: Callable | None = None,
-              clock: Callable[[], float] = time.monotonic, parallel: int | None = None) -> dict:
+              clock: Callable[[], float] = time.monotonic, parallel: int | None = None,
+              scout_client_factory: Callable | None = None) -> dict:
     """Resume a crashed/interrupted run: re-run every asset whose manifest
     status is not terminal (spec: ``assetpipe resume``).
 
@@ -281,7 +287,8 @@ def resume_run(run_root: Path, *, config: dict | None = None, blender_bin: str =
         with ThreadPoolExecutor(max_workers=max(1, max_workers)) as pool:
             futures = {
                 pool.submit(_run_one_asset, req, run_dir, contracts, cfg, registry,
-                           blender_bin, runner, vision_client_factory, clock): req["asset_id"]
+                           blender_bin, runner, vision_client_factory, clock,
+                           scout_client_factory): req["asset_id"]
                 for req in to_rerun
             }
             for fut in as_completed(futures):

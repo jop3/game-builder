@@ -29,6 +29,17 @@ vision:
   agent_exchange_dir: null    # required when client: agent (--vision-exchange)
   agent_poll_s: 2
   agent_timeout_s: 1800
+  # Detail scout (optional, advisory): a SEPARATE local high-resolution VLM
+  # pre-scans the renders and flags spots for the judge to look at closely --
+  # native resolution beats a cloud judge's downscaled view, and hints are
+  # advisory so a weak scout never fails an asset (docs/VISION_BACKENDS.md).
+  # Enabled by --vision-scout-url (config: scout.base_url); off when null.
+  scout:
+    base_url: null            # OpenAI-compatible endpoint (e.g. http://localhost:11434/v1)
+    model: null               # scout VLM id (e.g. qwen2.5vl); defaults to vision.model
+    api_key_env: null         # env var for the scout's key (default OPENAI_API_KEY)
+    max_edge: null            # optional downscale cap for scout images (null = native res)
+    request_timeout_s: 120
 
 iteration:
   max_iterations: 5

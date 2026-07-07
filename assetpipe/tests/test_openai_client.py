@@ -215,3 +215,43 @@ def test_inspect_asset_runs_end_to_end_with_openai_client(tmp_path):
         log_path=tmp_path / "vision_call.json")
     assert result.passed
     assert (tmp_path / "vision_call.json").exists()
+
+
+# ---------- complete_text (detail-scout transport) ----------
+
+def test_complete_text_returns_message_content(monkeypatch):
+    captured = {}
+
+    def fake_transport(url, headers, payload, timeout_s):
+        captured["payload"] = payload
+        return {"choices": [{"message": {"role": "assistant",
+                                         "content": "{\"turn_000\": [\"seam\"]}"}}]}
+
+    client = OpenAIVisionClient(base_url="http://fake/v1", api_key="k",
+                                transport=fake_transport, sleep=lambda _s: None)
+    text = client.complete_text(model="qwen2.5vl", content=[
+        {"type": "text", "text": "view_id: turn_000"},
+        {"type": "image", "source": {"type": "base64", "media_type": "image/png",
+                                     "data": PNG_B64}},
+        {"type": "text", "text": "spot defects"},
+    ], max_tokens=512)
+    assert text == '{"turn_000": ["seam"]}'
+    # no tools/tool_choice on a plain completion; images translated
+    assert "tools" not in captured["payload"]
+    assert captured["payload"]["max_tokens"] == 512
+    parts = captured["payload"]["messages"][0]["content"]
+    assert any(p["type"] == "image_url" for p in parts)
+
+
+def test_complete_text_raises_without_text_content():
+    def fake_transport(url, headers, payload, timeout_s):
+        return {"choices": [{"message": {"role": "assistant", "content": None}}]}
+
+    client = OpenAIVisionClient(base_url="http://fake/v1", api_key="k",
+                                transport=fake_transport, sleep=lambda _s: None)
+    try:
+        client.complete_text(model="m", content=[{"type": "text", "text": "hi"}])
+    except OpenAIVisionError:
+        pass
+    else:
+        raise AssertionError("expected OpenAIVisionError")

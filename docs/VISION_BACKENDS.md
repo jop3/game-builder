@@ -101,6 +101,48 @@ sending, so the resampling is at least predictable and logged. The
 `uncertain` crop re-query always sends full-resolution 512-px crops
 regardless of this setting.
 
+## Detail scout: local high-res eyes for a cloud judge (prototype)
+
+When the judge is a strong cloud model (Opus) but the provider downscales
+your renders before it sees them, you get the worst split: good judgement,
+degraded eyes. The detail scout narrows that gap. A SEPARATE local
+high-resolution VLM (Qwen2.5-VL via Ollama, ...) pre-scans the renders at
+native resolution and reports *where to look closely*; those notes are
+appended to the judge's prompt as **advisory hints**. The judge still makes
+every verdict against the same renders — the scout only steers attention.
+
+    # Opus judges; a local Qwen-VL scouts for fine detail it might miss
+    export ANTHROPIC_API_KEY=...
+    ollama pull qwen2.5vl
+    python -m assetpipe generate --request req.json --out runs/ \
+        --blender-bin blender --vision-client api --vision-model claude-opus-4-8 \
+        --vision-scout-url http://localhost:11434/v1 --vision-scout-model qwen2.5vl
+
+Config: `vision.scout.{base_url,model,api_key_env,max_edge,request_timeout_s}`.
+Off unless `scout.base_url` (or `--vision-scout-url`) is set. It composes
+with any judge client, including `--vision-client openai` (a hosted judge +
+a local scout).
+
+Design guarantees — this is why hints can't hurt:
+
+- **Advisory only.** Hints are free text merged into the prompt, never a
+  verdict, defect, or tool call. A hallucinating scout costs the judge a
+  second look at a clean spot; it cannot pass or fail a check.
+- **Never blocks.** Any scout error (Ollama down, timeout, garbage reply)
+  is swallowed and logged (`detail_scout` lines in `vision_call.json`); the
+  inspection runs exactly as if the scout were off.
+- **Full resolution.** The scout gets per-view images uncapped by default
+  (`scout.max_edge: null`) — native resolution is the whole point. It skips
+  the silhouette/normals/uvcheck debug passes (their "anomalies" are by
+  design) and contact sheets.
+
+Prototype status: the plumbing, isolation, logging, and prompt merge are
+tested end-to-end with stub transports (`test_detail_scout.py`,
+`test_inspector.py`); the quality payoff — does a real Qwen-VL scout raise
+Opus's catch rate without adding false-look noise — needs a live A/B on the
+fixture corpus (below). Treat the default scout prompt in
+`detail_scout.py` as a starting point to tune per theme.
+
 ## Expectations for imperfect models
 
 The harness already absorbs the common weak-model failure modes — the

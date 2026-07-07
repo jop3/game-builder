@@ -194,6 +194,7 @@ class SubprocessStages:
     vision_client: object = None
     llm_patch_fn: Callable | None = None
     history: HistoryLog | None = None
+    scout_client: object = None
 
     def __post_init__(self) -> None:
         self.asset_id = self.request["asset_id"]
@@ -663,7 +664,8 @@ class SubprocessStages:
         result = inspect_asset(self.vision_client, request=self.request, theme=self.theme,
                                bbox_range=self._bbox_range(), contact_sheets=contact_sheets,
                                renders_dir=renders_dir, iteration=iteration, contracts=self.contracts,
-                               config=self.config, log_path=log_path)
+                               config=self.config, log_path=log_path,
+                               scout_client=self.scout_client)
 
         warns = self._a_warns + result.warns
         self._a_warns = []

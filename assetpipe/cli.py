@@ -50,6 +50,10 @@ def _config(args) -> dict:
         cfg["vision"]["model"] = args.vision_model
     if getattr(args, "vision_base_url", None):
         cfg["vision"]["base_url"] = args.vision_base_url
+    if getattr(args, "vision_scout_url", None):
+        cfg["vision"].setdefault("scout", {})["base_url"] = args.vision_scout_url
+    if getattr(args, "vision_scout_model", None):
+        cfg["vision"].setdefault("scout", {})["model"] = args.vision_scout_model
     return cfg
 
 
@@ -65,7 +69,8 @@ def cmd_generate(args) -> int:
         cfg["iteration"]["max_iterations"] = args.max_iterations
     manifest = run_batch(Path(args.request), Path(args.out), config=cfg,
                          blender_bin=args.blender_bin, parallel=1,
-                         vision_client_factory=_vision_client_factory(cfg))
+                         vision_client_factory=_vision_client_factory(cfg),
+                         scout_client_factory=_scout_client_factory(cfg))
     _print(manifest)
     statuses = {e.get("status") for e in manifest.get("assets", {}).values()}
     return 0 if statuses and statuses <= {"validated", "best_effort"} else 1
@@ -76,7 +81,8 @@ def cmd_batch(args) -> int:
     cfg = _config(args)
     manifest = run_batch(Path(args.requests), Path(args.out), config=cfg,
                          blender_bin=args.blender_bin, parallel=args.parallel,
-                         vision_client_factory=_vision_client_factory(cfg))
+                         vision_client_factory=_vision_client_factory(cfg),
+                         scout_client_factory=_scout_client_factory(cfg))
     _print(manifest)
     return 0 if not manifest.get("aborted") else 1
 
@@ -191,7 +197,8 @@ def cmd_resume(args) -> int:
     from assetpipe.orchestrator import resume_run
     cfg = _config(args)
     manifest = resume_run(Path(args.run), config=cfg, blender_bin=args.blender_bin,
-                          vision_client_factory=_vision_client_factory(cfg))
+                          vision_client_factory=_vision_client_factory(cfg),
+                          scout_client_factory=_scout_client_factory(cfg))
     _print(manifest)
     return 0
 
@@ -259,6 +266,21 @@ def _vision_client_factory(cfg: dict):
     return lambda: _anthropic_client()
 
 
+def _scout_client_factory(cfg: dict):
+    """Optional detail-scout client (a SEPARATE local high-res VLM whose hints
+    are advisory). Returns None unless vision.scout.base_url is set, so the
+    scout is strictly opt-in and off by default (docs/VISION_BACKENDS.md)."""
+    scout = (cfg.get("vision", {}) or {}).get("scout") or {}
+    base_url = scout.get("base_url")
+    if not base_url:
+        return None
+    from assetpipe.vision.openai_client import API_KEY_ENV, OpenAIVisionClient
+    return lambda: OpenAIVisionClient(
+        base_url=base_url,
+        api_key_env=scout.get("api_key_env") or API_KEY_ENV,
+        timeout_s=float(scout.get("request_timeout_s", 120)))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="assetpipe",
                                      description="Autonomous game asset pipeline (spec 20.2)")
@@ -277,6 +299,13 @@ def build_parser() -> argparse.ArgumentParser:
                        help="override vision.client (agent = file-exchange V2)")
         p.add_argument("--vision-exchange", default=None,
                        help="exchange dir for --vision-client agent")
+        p.add_argument("--vision-scout-url", default=None,
+                       help="enable the advisory detail scout: OpenAI-compatible "
+                            "endpoint for a local high-res VLM whose hints guide "
+                            "the judge (config: vision.scout.base_url)")
+        p.add_argument("--vision-scout-model", default=None,
+                       help="detail-scout model id (config: vision.scout.model; "
+                            "defaults to vision.model)")
 
     p = sub.add_parser("generate", help="run one asset request through the full loop")
     common(p)

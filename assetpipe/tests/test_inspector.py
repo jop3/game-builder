@@ -481,3 +481,71 @@ def test_oversize_images_are_resized_before_sending(tmp_path):
     content = client2.messages.calls[0]["messages"][0]["content"]
     view_img = _decode_block(next(b for b in content if b["type"] == "image"))
     assert view_img.size == (1024, 1024)
+
+
+# ---------- detail scout integration (docs/VISION_BACKENDS.md) ----------
+
+class FakeScoutClient:
+    def __init__(self, reply):
+        self.reply = reply
+        self.calls = []
+
+    def complete_text(self, *, model, content, max_tokens=1024):
+        self.calls.append({"model": model})
+        if isinstance(self.reply, Exception):
+            raise self.reply
+        return self.reply
+
+
+def test_scout_hints_are_appended_to_judge_prompt(tmp_path):
+    client = FakeClient([make_response(_all_pass_report())])
+    scout = FakeScoutClient('{"turn_045": ["thin seam on the ridge"]}')
+    sheets = _contact_sheets(tmp_path)
+    renders = tmp_path / "renders"
+    _stub_render_views(renders, ["turn_045", "turn_090"])
+
+    config = {"vision": {**CONFIG["vision"], "scout": {"model": "qwen2.5vl"}}}
+    result = inspect_asset(client, request=REQUEST, theme=THEME, bbox_range="0.3-1.2 m",
+                           contact_sheets=sheets, renders_dir=renders, iteration=1,
+                           contracts=C, config=config, sleep=_no_sleep,
+                           scout_client=scout)
+    assert result.passed
+    assert scout.calls and scout.calls[0]["model"] == "qwen2.5vl"
+    # the judge's prompt (last text block) carries the advisory hint
+    content = client.messages.calls[0]["messages"][0]["content"]
+    prompt = content[-1]["text"]
+    assert "DETAIL-SCOUT HINTS" in prompt
+    assert "thin seam on the ridge" in prompt
+    assert "advisory" in prompt.lower()
+
+
+def test_scout_failure_does_not_change_inspection(tmp_path):
+    """A scout that errors is swallowed: the judge prompt has no hints block
+    and the asset still passes."""
+    client = FakeClient([make_response(_all_pass_report())])
+    scout = FakeScoutClient(RuntimeError("ollama offline"))
+    sheets = _contact_sheets(tmp_path)
+    renders = tmp_path / "renders"
+    _stub_render_views(renders, ["turn_045"])
+
+    config = {"vision": {**CONFIG["vision"], "scout": {"model": "m"}}}
+    result = inspect_asset(client, request=REQUEST, theme=THEME, bbox_range="0.3-1.2 m",
+                           contact_sheets=sheets, renders_dir=renders, iteration=1,
+                           contracts=C, config=config, sleep=_no_sleep,
+                           scout_client=scout)
+    assert result.passed
+    prompt = client.messages.calls[0]["messages"][0]["content"][-1]["text"]
+    assert "DETAIL-SCOUT HINTS" not in prompt
+
+
+def test_no_scout_client_leaves_prompt_unchanged(tmp_path):
+    client = FakeClient([make_response(_all_pass_report())])
+    sheets = _contact_sheets(tmp_path)
+    renders = tmp_path / "renders"
+    _stub_render_views(renders, ["turn_045"])
+
+    inspect_asset(client, request=REQUEST, theme=THEME, bbox_range="0.3-1.2 m",
+                  contact_sheets=sheets, renders_dir=renders, iteration=1,
+                  contracts=C, config=CONFIG, sleep=_no_sleep, scout_client=None)
+    prompt = client.messages.calls[0]["messages"][0]["content"][-1]["text"]
+    assert "DETAIL-SCOUT HINTS" not in prompt

@@ -267,22 +267,38 @@ class OpenAIVisionClient:
     def _headers(self) -> dict:
         return {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
 
-    def _create(self, **kwargs):
-        payload = to_chat_payload(kwargs)
+    def _post_with_retry(self, payload: dict) -> dict:
         url = f"{self.base_url}/chat/completions"
-        tool_name = (kwargs.get("tool_choice") or {}).get("name") \
-            or ((kwargs.get("tools") or [{}])[0].get("name", ""))
-
         attempts = len(_BACKOFFS_S) + 1
         for attempt in range(attempts):
             try:
-                data = self._transport(url, self._headers(), payload, self.timeout_s)
+                return self._transport(url, self._headers(), payload, self.timeout_s)
             except OpenAIVisionError as exc:
                 status = getattr(exc, "status", 0)
                 retryable = status is None or status in _RETRYABLE_STATUS
                 if not retryable or attempt == attempts - 1:
                     raise
                 self._sleep(_BACKOFFS_S[attempt])
-                continue
-            return from_chat_response(data, tool_name)
         raise AssertionError("unreachable")  # pragma: no cover
+
+    def _create(self, **kwargs):
+        payload = to_chat_payload(kwargs)
+        tool_name = (kwargs.get("tool_choice") or {}).get("name") \
+            or ((kwargs.get("tools") or [{}])[0].get("name", ""))
+        return from_chat_response(self._post_with_retry(payload), tool_name)
+
+    def complete_text(self, *, model: str, content: list, max_tokens: int = 1024) -> str:
+        """Plain (no-tool) completion for Anthropic-shaped ``content`` blocks;
+        returns the assistant message text. Used by the detail scout, whose
+        replies are free JSON rather than a forced tool call."""
+        parts, _ = _content_parts(content)
+        payload = {"model": model, "max_tokens": max_tokens,
+                   "messages": [{"role": "user", "content": parts}]}
+        data = self._post_with_retry(payload)
+        choices = data.get("choices") or []
+        if not choices:
+            raise OpenAIVisionError(f"chat response has no choices: {data!r:.500}")
+        text = (choices[0].get("message") or {}).get("content")
+        if not isinstance(text, str):
+            raise OpenAIVisionError("chat response message has no text content")
+        return text

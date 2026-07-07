@@ -27,6 +27,7 @@ from PIL import Image
 
 from assetpipe.contracts import Contracts
 from assetpipe.loop import InfraError, StageResult
+from assetpipe.vision import detail_scout
 from assetpipe.vision.prompts import build_inspection_prompt, build_recheck_prompt
 from assetpipe.vision.report import aggregate, extract_findings, validate_report
 
@@ -321,7 +322,8 @@ def inspect_asset(client, *, request: dict, theme: dict, bbox_range: str,
                   contact_sheets: list[Path], renders_dir: Path,
                   iteration: int, contracts: Contracts, config: dict,
                   log_path: Path | None = None,
-                  sleep: Callable[[float], None] = time.sleep) -> StageResult:
+                  sleep: Callable[[float], None] = time.sleep,
+                  scout_client=None) -> StageResult:
     """Run stage V2 for one iteration and return its StageResult (spec 15).
 
     See module docstring for the call/retry/recheck structure. `iteration` is
@@ -329,6 +331,12 @@ def inspect_asset(client, *, request: dict, theme: dict, bbox_range: str,
     logging needs; the report's own `iteration` field is whatever the model
     echoes back and is not itself load-bearing here (validate_report/
     extract_findings never inspect it).
+
+    ``scout_client`` (optional) is a separate, typically LOCAL high-resolution
+    vision client used for an advisory detail pre-pass (spec 15 stays the
+    authority). Its hints are merged into the judge's prompt as suggestions;
+    a scout failure is swallowed and the inspection proceeds unchanged. See
+    :mod:`assetpipe.vision.detail_scout` / docs/VISION_BACKENDS.md.
     """
     category = request["category"]
     model = config["vision"]["model"]
@@ -349,6 +357,18 @@ def inspect_asset(client, *, request: dict, theme: dict, bbox_range: str,
 
     prompt = build_inspection_prompt(request, theme, bbox_range, contracts,
                                      image_delivery=image_source)
+
+    # Detail-scout pre-pass (advisory): a local high-res model flags spots for
+    # the judge to look at closely. Failure-isolated inside scout_hints -- an
+    # empty string (scout off, or errored) leaves the prompt unchanged.
+    if scout_client is not None:
+        scout_cfg = config["vision"].get("scout", {})
+        hints_block = detail_scout.scout_hints(
+            scout_client, model=scout_cfg.get("model", model),
+            renders_dir=renders_dir, max_edge=scout_cfg.get("max_edge"),
+            log_path=log_path)
+        if hints_block:
+            prompt = prompt + "\n\n" + hints_block
 
     # NOTE: no temperature/top_p passed. Current Claude models reject sampling
     # parameters entirely; config's vision.temperature: 0 intent is satisfied
