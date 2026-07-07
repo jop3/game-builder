@@ -5,6 +5,37 @@ branch `claude/vision-verification-9xdrpd`). The house now matches the
 stylized reference structurally; the remaining distance is almost entirely
 in the TEXTURES. This file is self-contained for a fresh session.
 
+## Status (2026-07-07, branch `claude/texture-wave-work-bsv4ak`)
+
+Items 1-6 LANDED and verified end-to-end: the house request below ran to
+`validated` (shipped iteration 2) with the agent vision client, every
+rubric check judged pass by real vision, and `scripts/beauty_shot.py`
+shows the acceptance list -- per-plank/per-tile variation, painted edge
+highlights, matched shingle geometry+texture, streaky dark wood, glowing
+mullioned panes (the mullion cross is painted into the emissive by an AO
+node -- the bars are real geometry occluding the pane, no per-part coords
+needed), and grey cobble plinth with subtle moss. Notes for whoever
+continues:
+
+- Iteration 1 hit S20d FILE_TOO_LARGE (richer textures, ~6.8 MiB glb vs
+  the 3 MiB web cap); the `shrink_textures` table fix resolved it at
+  iteration 2 (2.4 MiB shipped) -- exactly the item-8 headroom warning, so
+  a 2048 atlas (item 8) is OFF the table for the web profile.
+- The emissive map is the whole glow story downstream: 8-bit, clamped at
+  1.0, and export_gltf pins Emission Strength = 1.0. Shape the map (the
+  window recipe now does), don't multiply strength through it -- the old
+  strength-4 bake clamped panes to hueless white.
+- `matlib.nodes.cell_jitter` cell math was verified aligned against a real
+  brick-texture bake (100/100 bricks constant-valued, negative coords
+  included). Its offset convention matches Cycles: offset applies on EVEN
+  rows.
+- Item 6 landed: `materials` entries accept `{recipe, params}` objects
+  end-to-end (generator schema -> params.json -> stages -> bake), slot
+  params beat the request-wide `material_overrides`, and env/house pins
+  `course_scale` 4.0 + plinth `cell_scale` 10 / `moss` 0.45 by default.
+- Item 7 (description-driven color) remains OPEN -- requests still pin
+  shingle hexes via `material_overrides`.
+
 ## Bootstrap (~10 min)
 
     bash scripts/setup_toolchain.sh && export PATH=/opt/toolchain/bin:$PATH

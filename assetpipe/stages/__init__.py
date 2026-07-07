@@ -205,20 +205,34 @@ class SubprocessStages:
         return materials[0]
 
     def _material_recipes(self, iter_dir: Path) -> list | None:
-        """Per-slot material recipe id list for multi-material assets
+        """Per-slot material recipe list for multi-material assets
         (spec 10.2: "generators may pick per-slot materials"). The
         generator's resolved params (params.json, written by generate.py)
         carry a ``materials`` list matching the recipe's face
         ``material_index`` assignments; when present and non-empty it is the
-        bake's slot list. None -> single ``_material_recipe()`` applies."""
+        bake's slot list. Entries are either bare recipe id strings or
+        slot-scoped ``{"recipe": id, "params": {...}}`` objects
+        (docs/TEXTURE_WAVE.md item 6) -- normalized here so bake.py sees only
+        those two shapes. None -> single ``_material_recipe()`` applies, and
+        a malformed list falls back the same way rather than half-applying."""
         try:
             params = json.loads((iter_dir / "params.json").read_text())
         except (OSError, json.JSONDecodeError, FileNotFoundError):
             return None
         materials = params.get("materials")
-        if isinstance(materials, list) and materials:
-            return [str(m) for m in materials]
-        return None
+        if not (isinstance(materials, list) and materials):
+            return None
+        normalized: list = []
+        for entry in materials:
+            if isinstance(entry, str) and entry:
+                normalized.append(entry)
+            elif isinstance(entry, dict) and isinstance(entry.get("recipe"), str) \
+                    and entry["recipe"]:
+                normalized.append({"recipe": entry["recipe"],
+                                   "params": dict(entry.get("params") or {})})
+            else:
+                return None
+        return normalized
 
     def _first_tiling_material(self, materials: list) -> str | None:
         from assetpipe.themes_io import ThemeIOError, load_material_recipe
