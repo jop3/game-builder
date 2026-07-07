@@ -62,10 +62,13 @@ def build(nt, params: dict, rng, palette_dict: dict) -> None:
     center_bias.inputs["Scale"].default_value = 1.4
     center_bias.inputs["Detail"].default_value = 1.0
     nt.links.new(tex_coord.outputs["Object"], center_bias.inputs["Vector"])
+    # To Max 1.2 (was 1.35): the dormer pane sat on a bias peak and its
+    # whole pane clamped paler than the main windows -- narrower bias keeps
+    # pane cores gold with only small white-hot spots (COLOR_WAVE item 4).
     bias_var = nt.nodes.new("ShaderNodeMapRange")
     nt.links.new(center_bias.outputs["Fac"], bias_var.inputs["Value"])
     bias_var.inputs["To Min"].default_value = 0.62
-    bias_var.inputs["To Max"].default_value = 1.35
+    bias_var.inputs["To Max"].default_value = 1.2
 
     # Mullion cross + frame recess as dark bars: the cross bars and frame are
     # real geometry over the pane, so tight-radius AO darkens exactly the

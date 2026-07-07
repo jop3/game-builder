@@ -580,3 +580,28 @@ def test_material_recipes_missing_params_json_is_none(tmp_path, fake_blender):
     iter_dir = run_dir.iter_dir("crate_01", 1)
     iter_dir.mkdir(parents=True, exist_ok=True)
     assert stages._material_recipes(iter_dir) is None
+
+
+def test_material_recipes_injects_description_derived_colors(tmp_path, fake_blender):
+    """COLOR_WAVE item 1 end-to-end at the stages seam: a color word bound to
+    a part noun lands as slot params on the matching slot, snapped to the
+    theme palette; an explicit request override withholds the derivation."""
+    request = {**REQUEST,
+               "description": "a hut with a red shingled roof",
+               "theme": "fantasy_medieval"}
+    palette = {"primary": ["#5B4636"], "secondary": ["#8C8377"],
+               "accent": ["#B08D2A", "#8A1E1E"]}
+    stages, run_dir = make_stages(tmp_path, fake_blender, request=request)
+    stages.theme = {"palette": palette}
+    iter_dir = _write_params_json(
+        run_dir, ["fantasy_aged_wood",
+                  {"recipe": "fantasy_roof_shingles", "params": {"course_scale": 4.0}}])
+
+    out = stages._material_recipes(iter_dir)
+    assert out[0] == "fantasy_aged_wood"
+    assert out[1]["params"]["color1_hex"] == "#8A1E1E"      # oxblood, not gold
+    assert out[1]["params"]["course_scale"] == 4.0
+
+    stages.request = {**request, "material_overrides": {"color1_hex": "#111111"}}
+    out = stages._material_recipes(iter_dir)
+    assert "color1_hex" not in out[1].get("params", {})

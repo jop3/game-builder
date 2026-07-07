@@ -47,6 +47,7 @@ from assetpipe.blender_scripts import contact_sheets
 from assetpipe.contracts import Contracts, stage_order
 from assetpipe.fixes.apply import ApplyResult, FixContext, apply_fix_plan
 from assetpipe.loop import InfraError, StageResult
+from assetpipe.matlib.color_words import derive_material_colors
 from assetpipe.rundir import HistoryLog, RunDir
 from assetpipe.validation.image_checks import (check_backface_fraction, check_clipping,
                                                check_not_empty, check_silhouette_area)
@@ -214,7 +215,12 @@ class SubprocessStages:
         slot-scoped ``{"recipe": id, "params": {...}}`` objects
         (docs/TEXTURE_WAVE.md item 6) -- normalized here so bake.py sees only
         those two shapes. None -> single ``_material_recipe()`` applies, and
-        a malformed list falls back the same way rather than half-applying."""
+        a malformed list falls back the same way rather than half-applying.
+
+        Description-derived colors (docs/COLOR_WAVE.md item 1) are merged in
+        here, as slot params, via ``matlib.color_words.derive_material_colors``
+        -- pure and deterministic given (description, materials, palette,
+        seed), so the generate() and apply_fix() bake payloads agree."""
         try:
             params = json.loads((iter_dir / "params.json").read_text())
         except (OSError, json.JSONDecodeError, FileNotFoundError):
@@ -232,7 +238,11 @@ class SubprocessStages:
                                    "params": dict(entry.get("params") or {})})
             else:
                 return None
-        return normalized
+        return derive_material_colors(
+            self.request.get("description", ""), normalized,
+            self.theme.get("palette", {}) or {},
+            seed=int(self.request.get("seed", 0)),
+            request_overrides=self.request.get("material_overrides") or {})
 
     def _first_tiling_material(self, materials: list) -> str | None:
         from assetpipe.themes_io import ThemeIOError, load_material_recipe

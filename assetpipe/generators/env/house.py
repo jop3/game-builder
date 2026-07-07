@@ -50,7 +50,7 @@ PARAM_SCHEMA = {
                            "params": {"course_scale": 4.0}},
                           "fantasy_window_glow",
                           {"recipe": "fantasy_stone_wall",
-                           "params": {"cell_scale": 10.0, "moss": 0.45}},
+                           "params": {"cell_scale": 10.0, "moss": 0.55}},
                       ]},
     },
     "additionalProperties": False,

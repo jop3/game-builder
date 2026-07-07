@@ -19,6 +19,11 @@ PARAM_SCHEMA = {
         # near-black (the reference's occasional tarred/shadow boards).
         "dark_board_chance": {"type": "number", "minimum": 0.0, "maximum": 0.35,
                               "default": 0.12},
+        # Explicit board colors ("#RRGGBB"), e.g. description-driven
+        # (docs/COLOR_WAVE.md item 1): color1 is the board face, color2 the
+        # dark grain streaks. Empty -> both sampled from ``primary``.
+        "color1_hex": {"type": "string", "default": ""},
+        "color2_hex": {"type": "string", "default": ""},
     },
     "additionalProperties": False,
 }
@@ -66,9 +71,13 @@ def build(nt, params: dict, rng, palette_dict: dict) -> None:
 
     # Both color draws from ``primary`` (the theme's dark browns): the old
     # primary/secondary mix let the light grey dominate and walls rendered
-    # plaster-pale next to the reference's chocolate planks.
-    ra, ga, ba = palette.sample_palette_color(palette_dict, "primary", rng)
-    rb, gb, bb = palette.sample_palette_color(palette_dict, "primary", rng)
+    # plaster-pale next to the reference's chocolate planks. Explicit hex
+    # params (description-driven color, COLOR_WAVE item 1) pin them instead:
+    # color1 is the board face (the ``rb`` mix end), color2 the streak base.
+    ra, ga, ba = (palette.hex_to_rgb(params["color2_hex"]) if params.get("color2_hex")
+                  else palette.sample_palette_color(palette_dict, "primary", rng))
+    rb, gb, bb = (palette.hex_to_rgb(params["color1_hex"]) if params.get("color1_hex")
+                  else palette.sample_palette_color(palette_dict, "primary", rng))
 
     # Streaky vertical grain (TEXTURE_WAVE item 3): noise sampled in the
     # swizzled plank domain with Z compressed hard, so features elongate
