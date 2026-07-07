@@ -16,5 +16,11 @@
   "wear_range": [0.0, 0.15],
   "detail_density_range": [0.0, 0.1],
   "vision_style_brief": "Assets should read as clean low-poly stylization: bright, saturated flat colors with hard-edged shading transitions between faces, no visible texture grain or wear, no PBR sheen. NOT: photoreal materials, gradients within a single face, metallic highlights, fine surface noise.",
+  "anti_style": [
+    "photoreal materials or PBR sheen",
+    "gradients within a single face",
+    "metallic highlights",
+    "fine surface noise or texture grain"
+  ],
   "skybox_defaults": { "recipe": "flat_gradient_sky", "sun_elevation_deg": 45 }
 }

@@ -117,6 +117,16 @@ def validate_theme(theme: dict) -> list[str]:
     _validate_unit_range(theme, "wear_range", errors)
     _validate_unit_range(theme, "detail_density_range", errors)
 
+    # Optional NOT-list (spec 7): the theme's explicit anti-style, injected into
+    # the vision prompt as a drift guard. When present it must be a list of
+    # non-empty strings; absent is fine (the vision_style_brief still carries it).
+    anti_style = theme.get("anti_style")
+    if anti_style is not None:
+        if not isinstance(anti_style, list) or not all(
+            isinstance(s, str) and s for s in anti_style
+        ):
+            errors.append("anti_style: must be a list of non-empty strings")
+
     skybox = theme.get("skybox_defaults")
     if not isinstance(skybox, dict) or not isinstance(skybox.get("recipe"), str) or not skybox.get("recipe"):
         errors.append("skybox_defaults.recipe: must be a non-empty string")

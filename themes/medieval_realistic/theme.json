@@ -16,5 +16,11 @@
   "wear_range": [0.3, 0.75],
   "detail_density_range": [0.3, 0.65],
   "vision_style_brief": "Assets should read as historically grounded medieval construction under real weathering: muted stone and timber tones, dark forged-iron accents, believable grime and edge wear concentrated at handling points and ground contact. NOT: cartoon proportions, saturated primary colors, sci-fi emissive strips, pristine unweathered surfaces.",
+  "anti_style": [
+    "cartoon or stylized proportions",
+    "saturated primary colors",
+    "sci-fi emissive strips",
+    "pristine unweathered surfaces"
+  ],
   "skybox_defaults": { "recipe": "overcast_castle_courtyard", "sun_elevation_deg": 30 }
 }

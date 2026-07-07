@@ -177,6 +177,13 @@ class Contracts:
                 },
                 "checks_not_applicable": {"type": "array", "items": {"enum": check_ids}},
                 "overall_impression": {"type": "string"},
+                # Open-ended catch-all (borrowed from Snittet's spelbygge feel
+                # rubric: "what is the ugliest thing?"). Non-gating and outside
+                # the closed R-rubric on purpose -- it surfaces the
+                # technically-valid-but-off defects that pass every check yet
+                # still make the asset read wrong. Logged, fed to diagnosis.md
+                # and the human art-direction spot-check; never an asset verdict.
+                "worst_thing": {"type": "string"},
             },
             "required": ["asset_id", "iteration", "checks", "checks_not_applicable",
                          "overall_impression"],

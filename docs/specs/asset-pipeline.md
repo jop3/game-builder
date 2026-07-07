@@ -332,6 +332,14 @@ Field roles:
   request materials from this list.
 - `silhouette_language` and `vision_style_brief`: injected verbatim into the vision prompt
   (Appendix A) for checks R5/R12. Writing these well is part of authoring a theme.
+- `anti_style` (optional): a **NOT-list** — a first-class array of short phrases naming
+  what the theme must *not* look like (e.g. `"wood as a dominant surface"`,
+  `"teal/orange sci-fi accents"`). Promoted from the `NOT:` clause that used to live only
+  inside `vision_style_brief`, it is injected into the vision prompt as an explicit
+  "this theme is NOT: …" line. Borrowed from Snittet's spelbygge brief, where the NOT-list
+  is the single strongest guard against scope drift; here it hardens R5/R12 against a
+  correct-but-off-theme asset (a knight rendered in the sci-fi theme). Absent is legal —
+  the brief still carries the intent — but every shipped theme declares one.
 - `wear_range` / `detail_density_range`: clamp ranges for the corresponding generator/material
   scalar params.
 
@@ -864,9 +872,21 @@ Each check declares which views the model must base it on, and its severity.
     }
   ],
   "overall_impression": "one-sentence summary",   // logged, never gates
-  "checks_not_applicable": ["R10", "R11"]
+  "checks_not_applicable": ["R10", "R11"],
+  "worst_thing": "the accent teal covers ~40% of the lid, reading as a toy not equipment"
+                                                   // open-ended catch-all; logged, never gates
 }
 ```
+
+**`worst_thing` (open-ended catch-all).** Optional free-text field, outside the closed
+R1–R12 rubric on purpose. It asks the inspector for the single thing that most makes the
+asset *not read as the requested description in the theme style* — even when every check
+passed. This is borrowed from Snittet's spelbygge feel-rubric ("what is the ugliest thing?
+what breaks the intended feeling most?"), which exists because a closed checklist cannot
+catch the technically-valid-but-soulless failure mode. It **never gates** (an asset is not
+failed on it) and is not a defect; it is logged to `vision_report.json` / `history.jsonl`,
+carried into best-effort `diagnosis.md`, and is the primary machine signal feeding the
+human art-direction spot-check (see `docs/PIPELINE_DOCTRINE.md`).
 
 Orchestrator-side validation: every rubric check applicable to the asset class appears
 exactly once as `checks[]` or `checks_not_applicable[]`; `defect_type` ∈ taxonomy; else the

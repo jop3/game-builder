@@ -41,6 +41,11 @@
     0.6
   ],
   "vision_style_brief": "Assets should read as hand-built fantasy-medieval construction: warm browns and stone greys, gold or oxblood accents used sparingly for banners/trim, visible tool marks and grain, torch-lit emissive glow rather than sci-fi strip lighting. NOT: polished metal panels, teal/orange sci-fi accents, symmetrical machined detail.",
+  "anti_style": [
+    "polished metal panels or machined surfaces",
+    "teal/orange sci-fi accents or strip lighting",
+    "symmetrical machined detail or right-angle greebles"
+  ],
   "skybox_defaults": {
     "recipe": "overcast_village",
     "sun_elevation_deg": 35

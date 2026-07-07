@@ -46,7 +46,11 @@ RULES
 4. confidence is your honest calibration in [0,1] for the verdict you chose.
 5. Every check listed under CHECKS must appear exactly once: either in checks[] or,
    if it does not apply to this asset, in checks_not_applicable[].
-6. Report exclusively through the report_inspection tool."""
+6. worst_thing (open-ended, non-gating): in one sentence, name the single thing that
+   most makes this asset NOT read as the requested description in the theme style --
+   even if every check above passed. This is a catch-all for defects the closed
+   rubric does not name. Leave it empty ONLY if nothing detracts.
+7. Report exclusively through the report_inspection tool."""
 
 
 def _fill_criteria(text: str, slots: dict[str, str]) -> str:
@@ -60,6 +64,11 @@ def build_inspection_prompt(request: dict, theme: dict, bbox_range: str,
                             image_delivery: str = "contact_sheets") -> str:
     checks = contracts.applicable_checks(request["category"])
     palette = theme.get("palette", {})
+    # NOT-list (borrowed from Snittet's spelbygge brief): the theme's explicit
+    # anti-style, promoted from the "NOT:" clause buried in vision_style_brief to
+    # a first-class list. Stating what the asset must NOT be is the strongest
+    # drift guard for R5/R12 (a knight in a sci-fi theme, wood on a metal hull).
+    anti_style = theme.get("anti_style", [])
     allowed = ", ".join(
         c for group in ("primary", "secondary", "accent", "emissive")
         for c in palette.get(group, []))
@@ -95,6 +104,8 @@ def build_inspection_prompt(request: dict, theme: dict, bbox_range: str,
         f"- theme style brief: {slots['vision_style_brief']}\n"
         f"- theme palette (allowed dominant hues): {slots['palette']}; "
         f"forbidden: {slots['forbidden']}\n"
+        f"- this theme is explicitly NOT: "
+        f"{'; '.join(anti_style) if anti_style else '(no anti-style declared)'}\n"
         f"- expected real-world size range: {bbox_range}",
         _HARNESS_NOTES.replace(
             "{label_line}",

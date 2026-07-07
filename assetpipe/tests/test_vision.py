@@ -41,6 +41,39 @@ def test_recheck_prompt_scopes_single_check():
     assert "[R4]" in p and "turn_045" in p and "fail-safe" in p.lower()
 
 
+def test_prompt_injects_anti_style_not_list_when_present():
+    theme = {**THEME, "anti_style": ["wood as a dominant surface",
+                                     "teal/orange sci-fi accents"]}
+    p = build_inspection_prompt(REQUEST, theme, "0.3-1.2 m", C)
+    assert "NOT:" in p
+    assert "wood as a dominant surface" in p
+    assert "teal/orange sci-fi accents" in p
+
+
+def test_prompt_degrades_gracefully_without_anti_style():
+    p = build_inspection_prompt(REQUEST, THEME, "0.3-1.2 m", C)  # THEME has none
+    assert "no anti-style declared" in p
+
+
+def test_prompt_asks_for_worst_thing_catch_all():
+    p = build_inspection_prompt(REQUEST, THEME, "0.3-1.2 m", C)
+    assert "worst_thing" in p
+
+
+def test_report_tool_schema_exposes_optional_worst_thing():
+    schema = C.report_tool_schema("prop_small")
+    assert "worst_thing" in schema["properties"]
+    assert schema["properties"]["worst_thing"] == {"type": "string"}
+    assert "worst_thing" not in schema["required"]   # non-gating: never required
+
+
+def test_validate_report_ignores_worst_thing_field():
+    # An open-ended advisory field must not affect semantic validation.
+    r = _report([_entry()])
+    r["worst_thing"] = "the accents read as a toy, not equipment"
+    assert validate_report(r, "prop_small", C) == []
+
+
 def _entry(cid="R4", verdict="fail", defect="VISIBLE_SEAM", views=("close_034",),
            conf=0.9, location="front edge"):
     return {"check_id": cid, "verdict": verdict, "confidence": conf,

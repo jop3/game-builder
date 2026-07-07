@@ -103,6 +103,23 @@ def test_validate_theme_rejects_out_of_range_wear_range():
     assert any("wear_range" in e for e in errors)
 
 
+@pytest.mark.parametrize("theme_id", THEME_IDS)
+def test_every_theme_declares_a_valid_anti_style_not_list(theme_id):
+    # The NOT-list is optional in the schema but every shipped theme declares one
+    # (spec 7); it must be a non-empty list of non-empty strings.
+    theme = load_theme(THEMES_ROOT, theme_id)
+    anti = theme.get("anti_style")
+    assert isinstance(anti, list) and anti, f"{theme_id} has no anti_style NOT-list"
+    assert all(isinstance(s, str) and s for s in anti)
+    assert validate_theme(theme) == []
+
+
+def test_validate_theme_rejects_malformed_anti_style():
+    theme = load_theme(THEMES_ROOT, "scifi_industrial")
+    assert any("anti_style" in e for e in validate_theme({**theme, "anti_style": "wood"}))
+    assert any("anti_style" in e for e in validate_theme({**theme, "anti_style": ["", 3]}))
+
+
 # ---------- material recipes ----------
 
 def _all_theme_material_ids():
