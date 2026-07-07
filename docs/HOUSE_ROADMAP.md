@@ -10,17 +10,17 @@ vision, tune, commit.
 
 ## Phase 1 — Color & material identity (cheap, biggest visual delta)
 
-- [ ] `fantasy_roof_shingles`: `color1_hex`/`color2_hex` params so a request
+- [x] `fantasy_roof_shingles`: `color1_hex`/`color2_hex` params so a request
       can pin the course colors; default stays palette-sampled. Request sets
       oxblood `#8A1E1E` (description says "red shingled roof" — material
       selection cannot read description words yet; explicit override is the
       honest v1).
-- [ ] Darken `fantasy_aged_wood` toward the reference's chocolate planks:
+- [x] Darken `fantasy_aged_wood` toward the reference's chocolate planks:
       bias Color A/B to `primary` (both draws), raise grain contrast,
       strengthen grunge darkening; add `plank` mode — vertical board seams
       (brick texture, 1 column x N rows, dark mortar) + per-board value
       jitter.
-- [ ] `fantasy_window_glow`: brighter center vignette (radial falloff),
+- [x] `fantasy_window_glow`: brighter center vignette (radial falloff),
       slightly deeper gold.
 
 ## Phase 2 — Read-at-a-glance architecture (framing & thickness)
