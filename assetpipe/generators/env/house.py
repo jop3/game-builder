@@ -151,8 +151,11 @@ def generate(params: dict, rng, theme: dict):
     for side in (1.0, -1.0):
         slab = bmesh.ops.create_cube(bm, size=1.0)
         bmesh.ops.scale(bm, verts=slab["verts"], vec=(w + 2 * ov + 0.15, slope_len, 0.12))
+        # Negative sign: for the +Y slope the slab must descend as y grows
+        # (a +pitch rotation about X lifts the +Y end -- the first render
+        # produced a butterfly roof).
         bmesh.ops.rotate(bm, verts=slab["verts"], cent=(0, 0, 0),
-                         matrix=Matrix.Rotation(side * pitch, 3, 'X'))
+                         matrix=Matrix.Rotation(-side * pitch, 3, 'X'))
         mid_y = side * slope_half_d / 2.0
         bmesh.ops.translate(bm, verts=slab["verts"],
                             vec=(0.0, mid_y, h + rise / 2.0 + 0.02))
