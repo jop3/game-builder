@@ -140,6 +140,37 @@ def resolve_params(param_schema: dict, theme: dict, seed: int,
     return params
 
 
+def resolve_slot_materials(slot_keywords, theme_materials) -> list | None:
+    """Resolve a generator's ``SLOT_MATERIALS`` keyword preferences against a
+    theme's material-recipe id list (spec 10.2 "generators may pick per-slot
+    materials", theme-agnostic: the generator names *roles* by keyword, the
+    theme supplies whichever recipes it has).
+
+    ``slot_keywords`` is a sequence of keyword tuples, one per slot, in
+    preference order (e.g. ``(("wood", "plank"), ("iron", "metal"))``); each
+    slot gets the first theme recipe id containing one of its keywords
+    (keyword order wins over list order). A slot with no match falls back to
+    the theme's first recipe -- Blender clamps out-of-range material indices
+    to 0 anyway, so the fallback just makes that collapse explicit. Returns
+    None when nothing resolves beyond that fallback (single-material themes):
+    the caller then keeps the plain single-material bake path.
+    """
+    ids = [m for m in (theme_materials or []) if isinstance(m, str) and m]
+    if not ids or not slot_keywords:
+        return None
+    resolved: list[str] = []
+    any_match = False
+    for keywords in slot_keywords:
+        slot_id = None
+        for keyword in keywords:
+            slot_id = next((m for m in ids if keyword in m), None)
+            if slot_id is not None:
+                any_match = True
+                break
+        resolved.append(slot_id if slot_id is not None else ids[0])
+    return resolved if any_match and len(set(resolved)) > 1 else None
+
+
 def _finding_from_check(check_id: str, defect_type: str, check: dict, view_id: str) -> Finding:
     return Finding(check_id=check_id, defect_type=defect_type, severity=check["severity"],
                   verdict="fail", confidence=1.0, evidence_views=[view_id], location=view_id,
@@ -227,7 +258,13 @@ class SubprocessStages:
             return None
         materials = params.get("materials")
         if not (isinstance(materials, list) and materials):
-            return None
+            # No explicit slot list: a generator may still declare per-slot
+            # ROLES (SLOT_MATERIALS keyword tuples) resolved against the
+            # theme's material list -- theme-agnostic multi-slot props
+            # (barrel staves + hoops, lantern metal + glass).
+            materials = self._slot_materials_from_generator()
+            if not materials:
+                return None
         normalized: list = []
         for entry in materials:
             if isinstance(entry, str) and entry:
@@ -243,6 +280,19 @@ class SubprocessStages:
             self.theme.get("palette", {}) or {},
             seed=int(self.request.get("seed", 0)),
             request_overrides=self.request.get("material_overrides") or {})
+
+    def _slot_materials_from_generator(self) -> list | None:
+        """The generator module's ``SLOT_MATERIALS`` keyword tuples resolved
+        against the theme's material list (see :func:`resolve_slot_materials`);
+        None when the generator declares none, the registry is absent, or
+        nothing resolves beyond the single-material fallback."""
+        gen_id = self.request.get("generator")
+        if not gen_id or self.registry is None or gen_id not in self.registry:
+            return None
+        slot_keywords = getattr(self.registry.get(gen_id), "SLOT_MATERIALS", None)
+        if not slot_keywords:
+            return None
+        return resolve_slot_materials(slot_keywords, self.theme.get("materials"))
 
     def _first_tiling_material(self, materials: list) -> str | None:
         from assetpipe.themes_io import ThemeIOError, load_material_recipe

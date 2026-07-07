@@ -78,6 +78,7 @@ PART_RECIPE_KEYWORDS: dict[str, tuple[str, ...]] = {
     "trim": ("trim", "iron"),
     "banner": ("banner", "cloth", "flag"),
     "plinth": ("stone", "cobble", "plinth"),
+    "barrel": ("barrel", "wood", "plank", "timber"),
 }
 
 # How many tokens before a part word a color word may sit ("red shingled
