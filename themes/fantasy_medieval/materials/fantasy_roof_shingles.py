@@ -13,6 +13,12 @@ PARAM_SCHEMA = {
         "course_scale": {"type": "number", "minimum": 4.0, "maximum": 16.0, "default": 8.0},
         "roughness": {"type": "number", "minimum": 0.5, "maximum": 0.95, "default": 0.8},
         "weathering": {"type": "number", "minimum": 0.0, "maximum": 0.6, "default": 0.3},
+        # Explicit course colors ("#RRGGBB"). Empty -> sampled from the
+        # theme's accent group. Requests whose description names a color
+        # (e.g. "red shingled roof") pin these via material_overrides until
+        # description-driven selection exists (docs/HOUSE_ROADMAP.md phase 1).
+        "color1_hex": {"type": "string", "default": ""},
+        "color2_hex": {"type": "string", "default": ""},
     },
     "additionalProperties": False,
 }
@@ -38,8 +44,10 @@ def build(nt, params: dict, rng, palette_dict: dict) -> None:
     brick.inputs["Scale"].default_value = params["course_scale"]
     brick.inputs["Mortar Size"].default_value = 0.02
     brick.inputs["Mortar"].default_value = (0.05, 0.03, 0.03, 1.0)
-    ra, ga, ba = palette.sample_palette_color(palette_dict, "accent", rng)
-    rb, gb, bb = palette.sample_palette_color(palette_dict, "accent", rng)
+    ra, ga, ba = (palette.hex_to_rgb(params["color1_hex"]) if params.get("color1_hex")
+                  else palette.sample_palette_color(palette_dict, "accent", rng))
+    rb, gb, bb = (palette.hex_to_rgb(params["color2_hex"]) if params.get("color2_hex")
+                  else palette.sample_palette_color(palette_dict, "accent", rng))
     brick.inputs["Color1"].default_value = (ra, ga, ba, 1.0)
     brick.inputs["Color2"].default_value = (ra * 0.8 + rb * 0.2, ga * 0.8 + gb * 0.2,
                                             ba * 0.8 + bb * 0.2, 1.0)
