@@ -194,6 +194,85 @@ def edge_wear(name: str = "AP_EdgeWear"):
     return nt
 
 
+def cell_jitter(name: str = "AP_CellJitter"):
+    """Per-cell white-noise jitter keyed to a brick/course grid (painted-look
+    per-plank / per-tile variation, docs/TEXTURE_WAVE.md item 1). Recovers the
+    integer (column, row) cell index of the SAME grid a Brick Texture builds
+    -- pass the identical Vector / Brick Width / Row Height / Offset -- and
+    hashes it through a White Noise texture, so every brick gets one stable
+    random value (``Fac``) plus three independent channels (``Color``) for
+    hue/value/mode jitter.
+
+    Cell math mirrors Cycles' brick texture (svm_brick / node_brick.osl):
+    ``row = floor(y / row_height)``; the row offset is ADDED to x on rows
+    where ``rownum % 2 == 0`` (C semantics -- consistent for negative rows via
+    ``1 - |fmod(row, 2)|``); ``col = floor(x / brick_width + offset * even)``.
+    Like every discrete pattern this must NOT route through PeriodicCoords
+    (docs/NEXT_STEPS.md): feed it the same raw coordinates as the brick node.
+    """
+    import bpy
+
+    nt = _get_or_create(name)
+    if nt.nodes:
+        return nt
+
+    group_in, group_out = _io(
+        nt,
+        inputs=[("Vector", "NodeSocketVector"), ("Brick Width", "NodeSocketFloat"),
+                ("Row Height", "NodeSocketFloat"), ("Offset", "NodeSocketFloat")],
+        outputs=[("Fac", "NodeSocketFloat"), ("Color", "NodeSocketColor")],
+    )
+    nt.interface.items_tree["Brick Width"].default_value = 0.5
+    nt.interface.items_tree["Row Height"].default_value = 0.25
+    nt.interface.items_tree["Offset"].default_value = 0.5
+
+    sep = nt.nodes.new("ShaderNodeSeparateXYZ")
+    nt.links.new(group_in.outputs["Vector"], sep.inputs["Vector"])
+
+    def _math(op, in0, in1=None, const1=None):
+        node = nt.nodes.new("ShaderNodeMath")
+        node.operation = op
+        nt.links.new(in0, node.inputs[0])
+        if in1 is not None:
+            nt.links.new(in1, node.inputs[1])
+        elif const1 is not None:
+            node.inputs[1].default_value = const1
+        return node
+
+    row_f = _math("DIVIDE", sep.outputs["Y"], group_in.outputs["Row Height"])
+    row = _math("FLOOR", row_f.outputs[0])
+    row_mod = _math("MODULO", row.outputs[0], const1=2.0)
+    row_abs = _math("ABSOLUTE", row_mod.outputs[0])
+    # 1 on even rows, 0 on odd -- Cycles applies the offset to even rows.
+    even = nt.nodes.new("ShaderNodeMath")
+    even.operation = "SUBTRACT"
+    even.inputs[0].default_value = 1.0
+    nt.links.new(row_abs.outputs[0], even.inputs[1])
+
+    shift = _math("MULTIPLY", even.outputs[0], group_in.outputs["Offset"])
+    col_f = _math("DIVIDE", sep.outputs["X"], group_in.outputs["Brick Width"])
+    col_shifted = _math("ADD", col_f.outputs[0], shift.outputs[0])
+    col = _math("FLOOR", col_shifted.outputs[0])
+
+    cell = nt.nodes.new("ShaderNodeCombineXYZ")
+    nt.links.new(col.outputs[0], cell.inputs["X"])
+    nt.links.new(row.outputs[0], cell.inputs["Y"])
+    # Sample at the cell center, not the corner: floor() puts the lookup on
+    # the cell boundary where float precision could flip a whole brick.
+    nudge = nt.nodes.new("ShaderNodeVectorMath")
+    nudge.operation = "ADD"
+    nudge.inputs[1].default_value = (0.5, 0.5, 0.0)
+    nt.links.new(cell.outputs[0], nudge.inputs[0])
+
+    noise = nt.nodes.new("ShaderNodeTexWhiteNoise")
+    noise.noise_dimensions = '3D'
+    nt.links.new(nudge.outputs[0], noise.inputs["Vector"])
+
+    nt.links.new(noise.outputs["Value"], group_out.inputs["Fac"])
+    nt.links.new(noise.outputs["Color"], group_out.inputs["Color"])
+    return nt
+
+
 def panel_lines(name: str = "AP_PanelLines"):
     """Brick-pattern grooves (spec 10.2): mortar mask darkens albedo and
     feeds a Bump for the normal pass.

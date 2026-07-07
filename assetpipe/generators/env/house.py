@@ -29,9 +29,29 @@ PARAM_SCHEMA = {
         "roof_overhang_m": {"type": "number", "minimum": 0.1, "maximum": 0.45, "default": 0.28},
         "dormer": {"type": "integer", "minimum": 0, "maximum": 1, "default": 1},
         "n_windows": {"type": "integer", "minimum": 1, "maximum": 4, "default": 2},
-        "materials": {"type": "array", "items": {"type": "string"},
-                      "default": ["fantasy_aged_wood", "fantasy_roof_shingles",
-                                  "fantasy_window_glow", "fantasy_stone_wall"]},
+        # Entries are recipe id strings or slot-scoped {"recipe", "params"}
+        # objects (docs/TEXTURE_WAVE.md item 6). Defaults pin the values the
+        # geometry implies: course_scale so the painted shingle courses match
+        # the 7 geometric rows per slope (~0.25 m spacing), and a coarser
+        # cobble grid + moss on the plinth (pinned overrides also skip
+        # resolve_params' +-10% jitter, keeping texture and geometry in step).
+        "materials": {"type": "array",
+                      "items": {"anyOf": [
+                          {"type": "string"},
+                          {"type": "object",
+                           "properties": {"recipe": {"type": "string"},
+                                          "params": {"type": "object"}},
+                           "required": ["recipe"],
+                           "additionalProperties": False},
+                      ]},
+                      "default": [
+                          "fantasy_aged_wood",
+                          {"recipe": "fantasy_roof_shingles",
+                           "params": {"course_scale": 4.0}},
+                          "fantasy_window_glow",
+                          {"recipe": "fantasy_stone_wall",
+                           "params": {"cell_scale": 10.0, "moss": 0.45}},
+                      ]},
     },
     "additionalProperties": False,
 }

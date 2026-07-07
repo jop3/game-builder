@@ -404,7 +404,19 @@ def bake_all_maps(ctx: dict, resolution_override: int | None = None, tiling: boo
     this module's ``main()`` and by the rebake-family fix functions in
     ``fixes.py``. All slots bake into ONE shared map set (atlas bake)."""
     obj = bpy.data.objects[ctx["object_name"]]
-    recipe_ids = list(ctx.get("material_recipes") or [ctx["material_recipe"]])
+    # Slot entries are bare recipe ids or slot-scoped {"recipe", "params"}
+    # objects (docs/TEXTURE_WAVE.md item 6): slot params override the
+    # request-wide material_overrides for that slot only -- specific beats
+    # general, so a generator can pin e.g. the plinth's cell_scale without
+    # the shared dict leaking it into every other material.
+    recipe_ids, slot_params = [], []
+    for entry in ctx.get("material_recipes") or [ctx["material_recipe"]]:
+        if isinstance(entry, dict):
+            recipe_ids.append(entry["recipe"])
+            slot_params.append(entry.get("params") or {})
+        else:
+            recipe_ids.append(entry)
+            slot_params.append({})
     rng = common.seeded_random(int(ctx.get("seed", 0)))
     resolution = resolution_override or ctx.get("texture_resolution", 1024)
     # Per-map budgets (profile textures.<category>, e.g. emissive is 512 on
@@ -426,10 +438,12 @@ def bake_all_maps(ctx: dict, resolution_override: int | None = None, tiling: boo
         # generator schemas"): defaults -> theme clamps -> seeded jitter ->
         # request overrides. ctx["material_params"] holds only the request's
         # material_overrides, so recipes indexing params["<name>"] need the
-        # schema defaults resolved here.
+        # schema defaults resolved here. Slot-scoped params win over the
+        # shared request dict for their slot.
         params = common.resolve_params(getattr(recipe, "PARAM_SCHEMA", {}) or {},
                                        ctx.get("theme") or {},
-                                       ctx.get("material_params") or {}, rng)
+                                       {**(ctx.get("material_params") or {}),
+                                        **slot_params[i]}, rng)
         recipe.build(mat.node_tree, params, rng, ctx.get("palette", {}))
         recipes.append(recipe)
         mats.append(mat)

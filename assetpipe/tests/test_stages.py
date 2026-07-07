@@ -530,3 +530,53 @@ def test_apply_fix_copies_generate_record_forward(tmp_path, fake_blender, monkey
 
     iter2 = run_dir.iter_dir("crate_01", 2)
     assert json.loads((iter2 / "result.json").read_text()).get("root_object")
+
+
+# ---------------------------------------------------------------------------
+# _material_recipes: slot-scoped {recipe, params} entries (TEXTURE_WAVE item 6)
+# ---------------------------------------------------------------------------
+
+def _write_params_json(run_dir, materials):
+    iter_dir = run_dir.iter_dir("crate_01", 1)
+    iter_dir.mkdir(parents=True, exist_ok=True)
+    (iter_dir / "params.json").write_text(json.dumps({"materials": materials}))
+    return iter_dir
+
+
+def test_material_recipes_passes_plain_strings_through(tmp_path, fake_blender):
+    stages, run_dir = make_stages(tmp_path, fake_blender)
+    iter_dir = _write_params_json(run_dir, ["mat_a", "mat_b"])
+    assert stages._material_recipes(iter_dir) == ["mat_a", "mat_b"]
+
+
+def test_material_recipes_normalizes_slot_scoped_entries(tmp_path, fake_blender):
+    stages, run_dir = make_stages(tmp_path, fake_blender)
+    iter_dir = _write_params_json(run_dir, [
+        "mat_a",
+        {"recipe": "mat_b", "params": {"cell_scale": 10.0}},
+        {"recipe": "mat_c"},
+    ])
+    assert stages._material_recipes(iter_dir) == [
+        "mat_a",
+        {"recipe": "mat_b", "params": {"cell_scale": 10.0}},
+        {"recipe": "mat_c", "params": {}},
+    ]
+
+
+@pytest.mark.parametrize("bad", [
+    [{"params": {"x": 1}}],          # object without a recipe id
+    [{"recipe": ""}],                # empty recipe id
+    ["mat_a", 7],                    # non-string, non-object entry
+    [""],                            # empty string entry
+])
+def test_material_recipes_malformed_list_falls_back_to_none(tmp_path, fake_blender, bad):
+    stages, run_dir = make_stages(tmp_path, fake_blender)
+    iter_dir = _write_params_json(run_dir, bad)
+    assert stages._material_recipes(iter_dir) is None
+
+
+def test_material_recipes_missing_params_json_is_none(tmp_path, fake_blender):
+    stages, run_dir = make_stages(tmp_path, fake_blender)
+    iter_dir = run_dir.iter_dir("crate_01", 1)
+    iter_dir.mkdir(parents=True, exist_ok=True)
+    assert stages._material_recipes(iter_dir) is None
