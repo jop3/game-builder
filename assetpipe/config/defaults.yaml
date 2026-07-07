@@ -12,6 +12,12 @@ vision:
   max_retries: 1              # schema/semantic-validation retries per call
   max_recheck_rounds: 1       # 'uncertain' crop re-queries per iteration (spec 15.5)
   max_concurrent_calls: 4
+  # What the model inspects. "views" = every render as its OWN image at full
+  # resolution, labeled by a preceding text line (recommended for API models:
+  # providers downscale big images -- a 2048x3072 contact sheet lands at
+  # ~875x1313 model-side, leaving each 1024 cell ~437 px and hiding small
+  # defects). "contact_sheets" = the composed 2x3 grids (fewer tokens).
+  image_source: "views"
   # api    = Anthropic SDK (ANTHROPIC_API_KEY; ANTHROPIC_BASE_URL for proxies)
   # openai = any OpenAI-compatible chat-completions endpoint -- OpenAI, Gemini
   #          compat, OpenRouter, vLLM, Ollama, ... (docs/VISION_BACKENDS.md)
