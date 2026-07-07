@@ -9,7 +9,8 @@ material recipe id for each slot --
 
 - slot 0: walls, door, dormer body (default ``fantasy_aged_wood``)
 - slot 1: roof + dormer roof      (default ``fantasy_roof_shingles``)
-- slot 2: window glass            (default ``fantasy_window_glow``)
+- slot 2: window glass, lantern   (default ``fantasy_window_glow``)
+- slot 3: stone plinth + doorstep  (default ``fantasy_stone_wall``)
 
 Windows and the door are thin slabs half-sunk into the walls (never
 booleans -- spec 9.5 / blender-procedural-geometry skill: booleans are the
@@ -30,7 +31,7 @@ PARAM_SCHEMA = {
         "n_windows": {"type": "integer", "minimum": 1, "maximum": 4, "default": 2},
         "materials": {"type": "array", "items": {"type": "string"},
                       "default": ["fantasy_aged_wood", "fantasy_roof_shingles",
-                                  "fantasy_window_glow"]},
+                                  "fantasy_window_glow", "fantasy_stone_wall"]},
     },
     "additionalProperties": False,
 }
@@ -40,7 +41,7 @@ KEYWORDS = ["house", "hut", "cottage", "cabin", "shack", "home"]
 # Real-world scale, environment_piece: a small one-storey house incl. roof.
 BBOX_RANGE = {"min": [2.5, 2.2, 2.5], "max": [6.0, 5.5, 6.0]}
 
-SLOT_WALLS, SLOT_ROOF, SLOT_GLASS = 0, 1, 2
+SLOT_WALLS, SLOT_ROOF, SLOT_GLASS, SLOT_STONE = 0, 1, 2, 3
 
 
 def _part_faces(bm, part_verts):
@@ -308,6 +309,38 @@ def generate(params: dict, rng, theme: dict):
                  wh_ + wing_rise, SLOT_ROOF, axis="x", center=(wing_cx, 0.0),
                  gable_slot=SLOT_WALLS)
     framed_opening((0.0, wh_ * 0.55), (win_w * 0.8, win_h * 0.75), "x", -1.0)
+
+    # --- scene dressing (roadmap phase 4): stone plinth, barrels, lantern.
+    # The plinth's lower half sits below z=0; base_center_origin then lifts
+    # everything so the plinth bottom becomes the ground contact and the
+    # house stands ON the stone disc, reference-style.
+    x_extent = w / 2.0 + ov + 0.2
+    x_min = wing_cx - ww_ / 2.0 - ov
+    plinth_cx = (x_extent + x_min) / 2.0
+    plinth_r = max(x_extent - plinth_cx, plinth_cx - x_min, d / 2.0 + ov) + 0.55
+    plinth = bmesh.ops.create_cone(bm, cap_ends=True, cap_tris=True, segments=22,
+                                   radius1=plinth_r + 0.08, radius2=plinth_r,
+                                   depth=0.26)
+    bmesh.ops.translate(bm, verts=plinth["verts"], vec=(plinth_cx, 0.0, 0.0))
+    _assign(bm, plinth["verts"], SLOT_STONE)
+
+    # barrels tucked against the front wall corner
+    for bx, brad, bh in ((w * 0.34, 0.30, 0.78), (w * 0.18, 0.26, 0.62)):
+        barrel = bmesh.ops.create_cone(bm, cap_ends=True, cap_tris=True, segments=10,
+                                       radius1=brad * 0.92, radius2=brad * 0.8,
+                                       depth=bh)
+        bmesh.ops.translate(bm, verts=barrel["verts"],
+                            vec=(bx + rng.uniform(-0.05, 0.05),
+                                 -(d / 2.0 + brad + 0.06), bh / 2.0 + 0.13))
+        _assign(bm, barrel["verts"], SLOT_WALLS)
+
+    # hanging lantern on a bracket beside the door
+    lz = door_h + 0.45
+    _box(bm, (0.34, 0.07, 0.07), (w / 2.0 + 0.17, door_y - door_w * 0.85, lz), SLOT_WALLS)
+    _box(bm, (0.15, 0.15, 0.2), (w / 2.0 + 0.30, door_y - door_w * 0.85, lz - 0.16),
+         SLOT_GLASS)
+    _box(bm, (0.19, 0.19, 0.05), (w / 2.0 + 0.30, door_y - door_w * 0.85, lz - 0.04),
+         SLOT_WALLS)
 
     common.base_center_origin(bm)
     common.finishing_pass(bm)
