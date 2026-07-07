@@ -23,7 +23,7 @@ PARAM_SCHEMA = {
     "properties": {
         "width_m": {"type": "number", "minimum": 2.5, "maximum": 5.0, "default": 3.6},
         "depth_m": {"type": "number", "minimum": 2.2, "maximum": 4.5, "default": 3.0},
-        "wall_height_m": {"type": "number", "minimum": 2.0, "maximum": 3.2, "default": 2.4},
+        "wall_height_m": {"type": "number", "minimum": 2.0, "maximum": 3.2, "default": 2.7},
         "roof_pitch": {"type": "number", "minimum": 0.5, "maximum": 1.2, "default": 0.85},
         "roof_overhang_m": {"type": "number", "minimum": 0.1, "maximum": 0.45, "default": 0.28},
         "dormer": {"type": "integer", "minimum": 0, "maximum": 1, "default": 1},
@@ -167,7 +167,37 @@ def generate(params: dict, rng, theme: dict):
         bmesh.ops.translate(bm, verts=slab["verts"],
                             vec=(0.0, mid_y, h + rise / 2.0 + 0.02))
         _assign(bm, slab["verts"], SLOT_ROOF)
-    _box(bm, (w + 2 * ov + 0.2, 0.16, 0.14), (0.0, 0.0, h + rise + 0.05), SLOT_ROOF)
+        # Shingle courses (roadmap phase 3): coarse row slabs laid down the
+        # slope, each slightly proud with rng eave-line jitter -- the
+        # reference's chunky, hand-laid tile read.
+        n_rows = 7
+        sin_p, cos_p = math.sin(pitch), math.cos(pitch)
+        for r in range(n_rows):
+            t = (r + 0.5) / n_rows * math.hypot(slope_half_d, rise)
+            row = bmesh.ops.create_cube(bm, size=1.0)
+            row_len = w + 2 * ov + 0.15 + rng.uniform(-0.04, 0.05)
+            row_w = math.hypot(slope_half_d, rise) / n_rows * 1.35
+            bmesh.ops.scale(bm, verts=row["verts"], vec=(row_len, row_w, 0.055))
+            bmesh.ops.rotate(bm, verts=row["verts"], cent=(0, 0, 0),
+                             matrix=Matrix.Rotation(-side * pitch, 3, 'X'))
+            y_r = side * (t * cos_p + sin_p * 0.10)
+            z_r = (h + rise + 0.08) - t * sin_p + cos_p * 0.10
+            bmesh.ops.translate(bm, verts=row["verts"],
+                                vec=(rng.uniform(-0.02, 0.02), y_r, z_r))
+            _assign(bm, row["verts"], SLOT_ROOF)
+    _box(bm, (w + 2 * ov + 0.2, 0.2, 0.16), (0.0, 0.0, h + rise + 0.12), SLOT_ROOF)
+
+    # --- wall relief (roadmap phase 3): corner posts and a storey beam so
+    # the silhouette stops reading as an extruded rectangle.
+    post = 0.16
+    for sx in (1.0, -1.0):
+        for sy in (1.0, -1.0):
+            _box(bm, (post, post, h + 0.04),
+                 (sx * (w / 2.0 - 0.01), sy * (d / 2.0 - 0.01), (h + 0.04) / 2.0),
+                 SLOT_WALLS)
+    for sy in (1.0, -1.0):
+        _box(bm, (w - 0.1, 0.09, 0.13), (0.0, sy * (d / 2.0 + 0.015), h * 0.42),
+             SLOT_WALLS)
 
     def framed_opening(center, size_wh, normal_axis: str, sign: float,
                        hood: bool = False, glass: bool = True) -> None:
