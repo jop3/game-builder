@@ -437,9 +437,19 @@ def bake_all_maps(ctx: dict, resolution_override: int | None = None, tiling: boo
     # Slot list mirrors recipe_ids exactly; face.material_index values set by
     # the generator recipe point into it. Out-of-range indices clamp to 0 in
     # Blender, so a single-material asset keeps working unchanged.
+    # CAUTION: mesh.materials.clear() RESETS every polygon.material_index to 0
+    # (verified on real Blender 4.2 -- it silently flattened the house's three
+    # slots into slot 0 and every map baked as the wall material). Snapshot
+    # the indices and restore them after slot replacement.
+    import numpy as np
+    poly_idx = np.empty(len(obj.data.polygons), dtype=np.int32)
+    obj.data.polygons.foreach_get("material_index", poly_idx)
     obj.data.materials.clear()
     for mat in mats:
         obj.data.materials.append(mat)
+    obj.data.polygons.foreach_set("material_index",
+                                  np.clip(poly_idx, 0, len(mats) - 1))
+    obj.data.update()
 
     if tiling:
         if not getattr(recipes[0], "TILING", False):
