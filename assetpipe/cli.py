@@ -46,6 +46,14 @@ def _config(args) -> dict:
         cfg["vision"]["client"] = args.vision_client
     if getattr(args, "vision_exchange", None):
         cfg["vision"]["agent_exchange_dir"] = args.vision_exchange
+    if getattr(args, "vision_model", None):
+        cfg["vision"]["model"] = args.vision_model
+    if getattr(args, "vision_base_url", None):
+        cfg["vision"]["base_url"] = args.vision_base_url
+    if getattr(args, "vision_scout_url", None):
+        cfg["vision"].setdefault("scout", {})["base_url"] = args.vision_scout_url
+    if getattr(args, "vision_scout_model", None):
+        cfg["vision"].setdefault("scout", {})["model"] = args.vision_scout_model
     return cfg
 
 
@@ -61,7 +69,8 @@ def cmd_generate(args) -> int:
         cfg["iteration"]["max_iterations"] = args.max_iterations
     manifest = run_batch(Path(args.request), Path(args.out), config=cfg,
                          blender_bin=args.blender_bin, parallel=1,
-                         vision_client_factory=_vision_client_factory(cfg))
+                         vision_client_factory=_vision_client_factory(cfg),
+                         scout_client_factory=_scout_client_factory(cfg))
     _print(manifest)
     statuses = {e.get("status") for e in manifest.get("assets", {}).values()}
     return 0 if statuses and statuses <= {"validated", "best_effort"} else 1
@@ -72,7 +81,8 @@ def cmd_batch(args) -> int:
     cfg = _config(args)
     manifest = run_batch(Path(args.requests), Path(args.out), config=cfg,
                          blender_bin=args.blender_bin, parallel=args.parallel,
-                         vision_client_factory=_vision_client_factory(cfg))
+                         vision_client_factory=_vision_client_factory(cfg),
+                         scout_client_factory=_scout_client_factory(cfg))
     _print(manifest)
     return 0 if not manifest.get("aborted") else 1
 
@@ -187,7 +197,8 @@ def cmd_resume(args) -> int:
     from assetpipe.orchestrator import resume_run
     cfg = _config(args)
     manifest = resume_run(Path(args.run), config=cfg, blender_bin=args.blender_bin,
-                          vision_client_factory=_vision_client_factory(cfg))
+                          vision_client_factory=_vision_client_factory(cfg),
+                          scout_client_factory=_scout_client_factory(cfg))
     _print(manifest)
     return 0
 
@@ -230,10 +241,14 @@ def _anthropic_client():
 
 
 def _vision_client_factory(cfg: dict):
-    """API client by default; vision.client: agent swaps in the file-exchange
-    client so a driving agent's own vision does V2 (agent_client docstring)."""
+    """Anthropic API client by default. ``vision.client: agent`` swaps in the
+    file-exchange client so a driving agent's own vision does V2
+    (agent_client docstring); ``vision.client: openai`` swaps in the
+    OpenAI-compatible adapter so ANY chat-completions endpoint/model can run
+    the loop (openai_client docstring, docs/VISION_BACKENDS.md)."""
     vision = cfg.get("vision", {})
-    if vision.get("client", "api") == "agent":
+    client = vision.get("client", "api")
+    if client == "agent":
         from assetpipe.vision.agent_client import AgentVisionClient
         exchange = vision.get("agent_exchange_dir")
         if not exchange:
@@ -242,7 +257,28 @@ def _vision_client_factory(cfg: dict):
         return lambda: AgentVisionClient(
             Path(exchange), poll_s=float(vision.get("agent_poll_s", 2)),
             timeout_s=float(vision.get("agent_timeout_s", 1800)))
+    if client == "openai":
+        from assetpipe.vision.openai_client import API_KEY_ENV, OpenAIVisionClient
+        return lambda: OpenAIVisionClient(
+            base_url=vision.get("base_url"),
+            api_key_env=vision.get("api_key_env") or API_KEY_ENV,
+            timeout_s=float(vision.get("request_timeout_s", 300)))
     return lambda: _anthropic_client()
+
+
+def _scout_client_factory(cfg: dict):
+    """Optional detail-scout client (a SEPARATE local high-res VLM whose hints
+    are advisory). Returns None unless vision.scout.base_url is set, so the
+    scout is strictly opt-in and off by default (docs/VISION_BACKENDS.md)."""
+    scout = (cfg.get("vision", {}) or {}).get("scout") or {}
+    base_url = scout.get("base_url")
+    if not base_url:
+        return None
+    from assetpipe.vision.openai_client import API_KEY_ENV, OpenAIVisionClient
+    return lambda: OpenAIVisionClient(
+        base_url=base_url,
+        api_key_env=scout.get("api_key_env") or API_KEY_ENV,
+        timeout_s=float(scout.get("request_timeout_s", 120)))
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -253,10 +289,23 @@ def build_parser() -> argparse.ArgumentParser:
     def common(p):
         p.add_argument("--config", help="pipeline.yaml overriding config/defaults.yaml")
         p.add_argument("--blender-bin", default="blender")
-        p.add_argument("--vision-client", choices=["api", "agent"], default=None,
+        p.add_argument("--vision-model", default=None,
+                       help="vision model id override (config: vision.model)")
+        p.add_argument("--vision-base-url", default=None,
+                       help="OpenAI-compatible endpoint base URL for "
+                            "--vision-client openai (config: vision.base_url; "
+                            "env: OPENAI_BASE_URL)")
+        p.add_argument("--vision-client", choices=["api", "openai", "agent"], default=None,
                        help="override vision.client (agent = file-exchange V2)")
         p.add_argument("--vision-exchange", default=None,
                        help="exchange dir for --vision-client agent")
+        p.add_argument("--vision-scout-url", default=None,
+                       help="enable the advisory detail scout: OpenAI-compatible "
+                            "endpoint for a local high-res VLM whose hints guide "
+                            "the judge (config: vision.scout.base_url)")
+        p.add_argument("--vision-scout-model", default=None,
+                       help="detail-scout model id (config: vision.scout.model; "
+                            "defaults to vision.model)")
 
     p = sub.add_parser("generate", help="run one asset request through the full loop")
     common(p)

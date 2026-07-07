@@ -92,14 +92,20 @@ against the real endpoint) still needs an `ANTHROPIC_API_KEY` run.
    (agent client, see above); what remains is the live-endpoint call shape
    + retry policy, then the labeled fixture corpus (§21.1 rendered fault
    fixtures) and the ≥90%-catch / 0-blocker-FP regression.
+   The loop is no longer Anthropic-only: `--vision-client openai` +
+   `--vision-model`/`--vision-base-url` runs V2 against any
+   OpenAI-compatible endpoint (OpenAI/Gemini/OpenRouter/vLLM/Ollama), with
+   weak-model fallbacks — see docs/VISION_BACKENDS.md. The fixture corpus
+   is also the right harness for qualifying those models.
    `assetpipe/tests/test_inspector.py`'s fakes document the expected
    response shapes.
-   Quality follow-ups from the house run: material selection should honor
-   description color words ("red shingled roof" sampled the gold accent);
-   wall materials could use plank/beam relief; the dormer roof leaves a
-   small notch at the main ridge; A1's min-std floor false-positives on a
-   flat-faced asset filling the frame (crate turn_270) — consider a
-   per-view or texture-aware floor.
+   Quality follow-ups from the house run: material selection honoring
+   description color words is DONE (2026-07-07, branch
+   `claude/colors-textures-q7snil`: `matlib/color_words.py`, status in
+   docs/COLOR_WAVE.md); wall materials could use plank/beam relief; the
+   dormer roof leaves a small notch at the main ridge; A1's min-std floor
+   false-positives on a flat-faced asset filling the frame (crate
+   turn_270) — consider a per-view or texture-aware floor.
 3. **CI wiring** — a workflow that runs the pure-Python suite per-commit,
    plus a manual/nightly job that runs `scripts/setup_toolchain.sh` and
    the two e2e smokes (crate, tiling). The smoke driver pattern lives in

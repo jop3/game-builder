@@ -134,13 +134,35 @@ def redither(ctx, action: dict) -> dict:
     return {"changed": changed}
 
 
+# shrink_textures priority tiers (docs/COLOR_WAVE.md item 2): the painted
+# per-plank/per-tile albedo detail is what the texture wave paid for, and the
+# emissive carries the whole window-glow read (it is already 512-capped on
+# web) -- so pay with normal+orm first (their detail is least visible at this
+# art style), then albedo, emissive last. Lower tier number shrinks first.
+SHRINK_TIERS = {"normal": 0, "orm": 0, "albedo": 1, "emissive": 2}
+# Above this edge length a map is fair game for its tier; below it the fix
+# only returns to the map after EVERY map is at the soft floor (the hard pass
+# exists so the loop still converges when e.g. the albedo alone busts the cap).
+SHRINK_SOFT_FLOOR_PX = 256
+SHRINK_HARD_FLOOR_PX = 64
+
+
 def shrink_textures(ctx, action: dict) -> dict:
     """`shrink_textures` / OVER_BUDGET (file size): while the total bytes of
     `maps/` exceed the profile's file-size cap for the request's category,
-    halve the resolution of the currently-largest (by file size) map with
-    LANCZOS resampling, never shrinking below 64px on either axis. If the
-    category has no file-size cap in the profile (e.g. skybox/tiling sets),
-    this is a no-op.
+    halve one map at a time (LANCZOS), priority-aware (COLOR_WAVE item 2):
+
+    1. normal + orm first (largest first within the tier), re-measuring
+       after every halving, down to a 256 px soft floor;
+    2. then albedo, then emissive, likewise down to the soft floor;
+    3. only if EVERY map sits at the soft floor and the total still busts
+       the cap, a hard pass repeats the same tier order down to 64 px --
+       the fix must terminate even when the albedo alone busts the cap.
+
+    Never shrinks below 64 px on either axis. If the category has no
+    file-size cap in the profile (e.g. skybox/tiling sets), this is a no-op.
+    Shrinking only ever lowers resolutions, so S14 per-map budget checks
+    can't newly fail.
     """
     maps_dir = _maps_dir(ctx)
     profile = ctx.contracts.profile(ctx.request["platform_profile"])
@@ -156,17 +178,28 @@ def shrink_textures(ctx, action: dict) -> dict:
     def total_bytes() -> int:
         return sum(p.stat().st_size for p in paths.values())
 
+    def next_victim(floor: int):
+        """Shrinkable map with the lowest tier, largest file first within
+        the tier; None when every map is at/below ``floor``."""
+        shrinkable = [(name, p) for name, p in paths.items()
+                      if min(Image.open(p).size) > floor]
+        if not shrinkable:
+            return None
+        return min(shrinkable,
+                   key=lambda kv: (SHRINK_TIERS.get(kv[0], 99),
+                                   -kv[1].stat().st_size))
+
     guard = 0
     while total_bytes() > cap and guard < 64:
         guard += 1
-        shrinkable = [(name, p) for name, p in paths.items()
-                      if min(Image.open(p).size) > 64]
-        if not shrinkable:
+        victim = next_victim(SHRINK_SOFT_FLOOR_PX) or next_victim(SHRINK_HARD_FLOOR_PX)
+        if victim is None:
             break
-        name, p = max(shrinkable, key=lambda kv: kv[1].stat().st_size)
+        name, p = victim
         img = Image.open(p)
         w, h = img.size
-        new_size = (max(64, w // 2), max(64, h // 2))
+        new_size = (max(SHRINK_HARD_FLOOR_PX, w // 2),
+                    max(SHRINK_HARD_FLOOR_PX, h // 2))
         img.resize(new_size, Image.LANCZOS).save(p)
 
     sizes_after = {name: p.stat().st_size for name, p in paths.items()}

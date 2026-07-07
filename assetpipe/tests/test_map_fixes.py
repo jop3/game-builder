@@ -228,3 +228,71 @@ def test_shrink_textures_no_maps_present(tmp_path):
                   contracts=fake)
     result = map_fixes.shrink_textures(ctx, {})
     assert result == {"before": {}, "after": {}, "cap": 1}
+
+
+def _noise_map(maps_dir, name, px, seed=0):
+    rng = np.random.default_rng(seed)
+    arr = rng.integers(0, 256, size=(px, px, 3), dtype=np.uint8)  # incompressible
+    Image.fromarray(arr, mode="RGB").save(maps_dir / f"{name}.png")
+    return (maps_dir / f"{name}.png").stat().st_size
+
+
+def _shrink_ctx(tmp_path, cap):
+    fake = FakeContracts({"file_bytes": {"prop_small": cap}})
+    return make_ctx(tmp_path, request={"seed": 1, "platform_profile": "web",
+                                       "category": "prop_small"}, contracts=fake)
+
+
+def test_shrink_textures_pays_with_normal_and_orm_before_albedo(tmp_path):
+    """COLOR_WAVE item 2: the painted albedo detail is what the texture wave
+    paid for -- normal+orm shrink first, and when that alone satisfies the
+    cap the albedo (and emissive) are untouched."""
+    maps_dir = tmp_path / "maps"
+    maps_dir.mkdir()
+    albedo_size = _noise_map(maps_dir, "albedo", 512, seed=1)
+    emissive_size = _noise_map(maps_dir, "emissive", 256, seed=2)
+    _noise_map(maps_dir, "normal", 512, seed=3)
+    _noise_map(maps_dir, "orm", 512, seed=4)
+
+    # Cap chosen so halving normal+orm to 256 is enough, albedo alone is not.
+    cap = albedo_size + emissive_size + 2 * (albedo_size // 3)
+    map_fixes.shrink_textures(_shrink_ctx(tmp_path, cap), {})
+
+    assert Image.open(maps_dir / "albedo.png").size == (512, 512)     # untouched
+    assert Image.open(maps_dir / "emissive.png").size == (256, 256)   # untouched
+    assert Image.open(maps_dir / "normal.png").size[0] < 512
+    assert Image.open(maps_dir / "orm.png").size[0] < 512
+
+
+def test_shrink_textures_touches_emissive_last(tmp_path):
+    """Emissive carries the window-glow read: albedo must shrink before the
+    emissive is ever touched."""
+    maps_dir = tmp_path / "maps"
+    maps_dir.mkdir()
+    _noise_map(maps_dir, "albedo", 512, seed=1)
+    emissive_size = _noise_map(maps_dir, "emissive", 256, seed=2)
+    normal_256 = _noise_map(maps_dir, "normal", 256, seed=3)
+
+    # normal already at the soft floor; cap forces albedo down to the soft
+    # floor but is satisfied before the emissive would have to pay.
+    cap = emissive_size + normal_256 + 2 * emissive_size
+    map_fixes.shrink_textures(_shrink_ctx(tmp_path, cap), {})
+
+    assert Image.open(maps_dir / "emissive.png").size == (256, 256)   # untouched
+    assert Image.open(maps_dir / "normal.png").size == (256, 256)     # soft floor
+    assert Image.open(maps_dir / "albedo.png").size[0] <= 256         # paid
+
+
+def test_shrink_textures_hard_pass_below_soft_floor_still_converges(tmp_path):
+    """When every map is at the 256 soft floor and the cap is still busted,
+    the hard pass goes below it (same tier order) instead of looping forever."""
+    maps_dir = tmp_path / "maps"
+    maps_dir.mkdir()
+    _noise_map(maps_dir, "albedo", 256, seed=1)
+    _noise_map(maps_dir, "normal", 256, seed=2)
+
+    result = map_fixes.shrink_textures(_shrink_ctx(tmp_path, 1), {})  # impossible cap
+
+    assert Image.open(maps_dir / "albedo.png").size == (64, 64)
+    assert Image.open(maps_dir / "normal.png").size == (64, 64)
+    assert result["cap"] == 1

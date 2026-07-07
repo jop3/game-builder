@@ -580,3 +580,82 @@ def test_material_recipes_missing_params_json_is_none(tmp_path, fake_blender):
     iter_dir = run_dir.iter_dir("crate_01", 1)
     iter_dir.mkdir(parents=True, exist_ok=True)
     assert stages._material_recipes(iter_dir) is None
+
+
+FANTASY_MATERIALS = ["fantasy_stone_wall", "fantasy_aged_wood", "fantasy_iron_trim",
+                     "fantasy_cloth_banner", "fantasy_roof_shingles", "fantasy_window_glow"]
+
+
+def test_resolve_slot_materials_barrel_and_lantern_roles():
+    from assetpipe.stages import resolve_slot_materials
+    assert resolve_slot_materials(
+        (("wood", "plank"), ("iron", "trim", "metal")), FANTASY_MATERIALS,
+    ) == ["fantasy_aged_wood", "fantasy_iron_trim"]
+    assert resolve_slot_materials(
+        (("iron", "metal"), ("glow", "window", "glass")), FANTASY_MATERIALS,
+    ) == ["fantasy_iron_trim", "fantasy_window_glow"]
+
+
+def test_resolve_slot_materials_keyword_order_beats_list_order():
+    # "wood" must win over the earlier-listed stone_wall's "wall".
+    from assetpipe.stages import resolve_slot_materials
+    out = resolve_slot_materials((("wood", "wall"), ("iron",)), FANTASY_MATERIALS)
+    assert out[0] == "fantasy_aged_wood"
+
+
+def test_resolve_slot_materials_unmatched_slot_falls_back_to_first():
+    from assetpipe.stages import resolve_slot_materials
+    out = resolve_slot_materials((("nonexistent",), ("iron",)), FANTASY_MATERIALS)
+    assert out == ["fantasy_stone_wall", "fantasy_iron_trim"]
+
+
+def test_resolve_slot_materials_single_material_theme_collapses_to_none():
+    from assetpipe.stages import resolve_slot_materials
+    assert resolve_slot_materials((("wood",), ("iron",)), ["scifi_hull_metal"]) is None
+    assert resolve_slot_materials((("wood",), ("iron",)), []) is None
+    assert resolve_slot_materials((), FANTASY_MATERIALS) is None
+
+
+def test_material_recipes_falls_back_to_generator_slot_materials(tmp_path, fake_blender):
+    """A generator declaring SLOT_MATERIALS gets a theme-resolved slot list
+    when params.json carries no explicit materials (accessories wave)."""
+    stages, run_dir = make_stages(tmp_path, fake_blender)
+    stages.registry._m["props/crate"].SLOT_MATERIALS = (
+        ("wood", "plank"), ("iron", "trim"))
+    stages.theme = {"materials": FANTASY_MATERIALS, "palette": {}}
+    try:
+        iter_dir = run_dir.iter_dir("crate_01", 1)
+        iter_dir.mkdir(parents=True, exist_ok=True)
+        (iter_dir / "params.json").write_text(json.dumps({"size": 1.0}))
+        assert stages._material_recipes(iter_dir) == [
+            "fantasy_aged_wood", "fantasy_iron_trim"]
+        # An explicit materials list still wins over SLOT_MATERIALS.
+        (iter_dir / "params.json").write_text(json.dumps({"materials": ["mat_x"]}))
+        assert stages._material_recipes(iter_dir) == ["mat_x"]
+    finally:
+        del stages.registry._m["props/crate"].SLOT_MATERIALS
+
+
+def test_material_recipes_injects_description_derived_colors(tmp_path, fake_blender):
+    """COLOR_WAVE item 1 end-to-end at the stages seam: a color word bound to
+    a part noun lands as slot params on the matching slot, snapped to the
+    theme palette; an explicit request override withholds the derivation."""
+    request = {**REQUEST,
+               "description": "a hut with a red shingled roof",
+               "theme": "fantasy_medieval"}
+    palette = {"primary": ["#5B4636"], "secondary": ["#8C8377"],
+               "accent": ["#B08D2A", "#8A1E1E"]}
+    stages, run_dir = make_stages(tmp_path, fake_blender, request=request)
+    stages.theme = {"palette": palette}
+    iter_dir = _write_params_json(
+        run_dir, ["fantasy_aged_wood",
+                  {"recipe": "fantasy_roof_shingles", "params": {"course_scale": 4.0}}])
+
+    out = stages._material_recipes(iter_dir)
+    assert out[0] == "fantasy_aged_wood"
+    assert out[1]["params"]["color1_hex"] == "#8A1E1E"      # oxblood, not gold
+    assert out[1]["params"]["course_scale"] == 4.0
+
+    stages.request = {**request, "material_overrides": {"color1_hex": "#111111"}}
+    out = stages._material_recipes(iter_dir)
+    assert "color1_hex" not in out[1].get("params", {})

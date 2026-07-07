@@ -7,10 +7,15 @@ window slabs. The first recipe to exercise per-part material slots
 ``material_index`` 0/1/2 and the ``materials`` param lists the theme
 material recipe id for each slot --
 
-- slot 0: walls, door, dormer body (default ``fantasy_aged_wood``)
-- slot 1: roof + dormer roof      (default ``fantasy_roof_shingles``)
-- slot 2: window glass, lantern   (default ``fantasy_window_glow``)
+- slot 0: walls, door, dormer body, barrel bodies (default ``fantasy_aged_wood``)
+- slot 1: roof + dormer roof       (default ``fantasy_roof_shingles``)
+- slot 2: window glass             (default ``fantasy_window_glow``)
 - slot 3: stone plinth + doorstep  (default ``fantasy_stone_wall``)
+- slot 4: barrel hoops, lantern bracket + cage plates
+  (default ``fantasy_iron_trim``)
+- slot 5: lantern glass (default ``fantasy_window_glow`` pinned warm +
+  bar-free: the pane is small enough that the window AO bars would dim
+  the whole pane grey -- COLOR_WAVE item 4)
 
 Windows and the door are thin slabs half-sunk into the walls (never
 booleans -- spec 9.5 / blender-procedural-geometry skill: booleans are the
@@ -50,7 +55,11 @@ PARAM_SCHEMA = {
                            "params": {"course_scale": 4.0}},
                           "fantasy_window_glow",
                           {"recipe": "fantasy_stone_wall",
-                           "params": {"cell_scale": 10.0, "moss": 0.45}},
+                           "params": {"cell_scale": 10.0, "moss": 0.55}},
+                          "fantasy_iron_trim",
+                          {"recipe": "fantasy_window_glow",
+                           "params": {"warmth": 1.0, "bar_strength": 0.0,
+                                      "pane_scale": 18.0}},
                       ]},
     },
     "additionalProperties": False,
@@ -61,7 +70,7 @@ KEYWORDS = ["house", "hut", "cottage", "cabin", "shack", "home"]
 # Real-world scale, environment_piece: a small one-storey house incl. roof.
 BBOX_RANGE = {"min": [2.5, 2.2, 2.5], "max": [6.0, 5.5, 6.0]}
 
-SLOT_WALLS, SLOT_ROOF, SLOT_GLASS, SLOT_STONE = 0, 1, 2, 3
+SLOT_WALLS, SLOT_ROOF, SLOT_GLASS, SLOT_STONE, SLOT_IRON, SLOT_LANTERN = 0, 1, 2, 3, 4, 5
 
 
 def _part_faces(bm, part_verts):
@@ -344,23 +353,38 @@ def generate(params: dict, rng, theme: dict):
     bmesh.ops.translate(bm, verts=plinth["verts"], vec=(plinth_cx, 0.0, 0.0))
     _assign(bm, plinth["verts"], SLOT_STONE)
 
-    # barrels tucked against the front wall corner
+    # barrels tucked against the front wall corner: plank-wood bodies with
+    # proud iron hoop rings (accessories pass -- the flat cones read as
+    # wall-material boxes before). Each ring is its own manifold squat
+    # cylinder, strictly overlapping the tapered body (never coincident
+    # planes: remove_doubles welds those into non-manifold seams).
     for bx, brad, bh in ((w * 0.34, 0.30, 0.78), (w * 0.18, 0.26, 0.62)):
+        bcx = bx + rng.uniform(-0.05, 0.05)
+        bcy = -(d / 2.0 + brad + 0.06)
+        bcz = bh / 2.0 + 0.13
         barrel = bmesh.ops.create_cone(bm, cap_ends=True, cap_tris=True, segments=10,
                                        radius1=brad * 0.92, radius2=brad * 0.8,
                                        depth=bh)
-        bmesh.ops.translate(bm, verts=barrel["verts"],
-                            vec=(bx + rng.uniform(-0.05, 0.05),
-                                 -(d / 2.0 + brad + 0.06), bh / 2.0 + 0.13))
+        bmesh.ops.translate(bm, verts=barrel["verts"], vec=(bcx, bcy, bcz))
         _assign(bm, barrel["verts"], SLOT_WALLS)
+        for t in (0.22, 0.74):
+            r_here = brad * (0.92 + (0.8 - 0.92) * t) + 0.012
+            hoop = bmesh.ops.create_cone(bm, cap_ends=True, cap_tris=True, segments=10,
+                                         radius1=r_here, radius2=r_here,
+                                         depth=bh * 0.09)
+            bmesh.ops.translate(bm, verts=hoop["verts"],
+                                vec=(bcx, bcy, bcz + (t - 0.5) * bh))
+            _assign(bm, hoop["verts"], SLOT_IRON)
 
-    # hanging lantern on a bracket beside the door
+    # hanging lantern on a bracket beside the door: forged-iron bracket and
+    # cage plates around a dedicated warm bar-free glass slot (the shared
+    # window material read white-ish here -- COLOR_WAVE item 4).
     lz = door_h + 0.45
-    _box(bm, (0.34, 0.07, 0.07), (w / 2.0 + 0.17, door_y - door_w * 0.85, lz), SLOT_WALLS)
-    _box(bm, (0.15, 0.15, 0.2), (w / 2.0 + 0.30, door_y - door_w * 0.85, lz - 0.16),
-         SLOT_GLASS)
-    _box(bm, (0.19, 0.19, 0.05), (w / 2.0 + 0.30, door_y - door_w * 0.85, lz - 0.04),
-         SLOT_WALLS)
+    ly = door_y - door_w * 0.85
+    _box(bm, (0.34, 0.07, 0.07), (w / 2.0 + 0.17, ly, lz), SLOT_IRON)
+    _box(bm, (0.15, 0.15, 0.2), (w / 2.0 + 0.30, ly, lz - 0.16), SLOT_LANTERN)
+    _box(bm, (0.19, 0.19, 0.05), (w / 2.0 + 0.30, ly, lz - 0.04), SLOT_IRON)
+    _box(bm, (0.19, 0.19, 0.04), (w / 2.0 + 0.30, ly, lz - 0.285), SLOT_IRON)
 
     common.base_center_origin(bm)
     common.finishing_pass(bm)

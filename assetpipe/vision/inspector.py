@@ -27,6 +27,7 @@ from PIL import Image
 
 from assetpipe.contracts import Contracts
 from assetpipe.loop import InfraError, StageResult
+from assetpipe.vision import detail_scout
 from assetpipe.vision.prompts import build_inspection_prompt, build_recheck_prompt
 from assetpipe.vision.report import aggregate, extract_findings, validate_report
 
@@ -43,6 +44,15 @@ _BACKOFFS_S = (5, 30)
 # up first (spec 15.5). The crop loop also clamps defensively.
 _CROP_SIZE = 512
 _MIN_CROP_SOURCE_DIM = 768
+
+# Providers downscale big images before the model sees them (Anthropic: long
+# edge capped ~1568 px, then a ~1.15-megapixel cap). Anything we send above
+# that is resampled by code we don't control; resize ourselves (LANCZOS) so
+# what the model inspects is predictable. 1024^2 renders pass through
+# untouched; a 2048x3072 contact sheet would land at ~875x1313 -- each 1024
+# cell inspected at ~437 px, which is why vision.image_source: views exists
+# (docs/VISION_BACKENDS.md).
+_MAX_SEND_EDGE = 1568
 
 
 def _anthropic_module():
@@ -90,12 +100,45 @@ def _image_block(data: bytes) -> dict:
                                         "data": base64.b64encode(data).decode("ascii")}}
 
 
+def _read_capped(path: Path) -> bytes:
+    """PNG bytes, resized down to _MAX_SEND_EDGE on the long edge if needed
+    so the provider never resamples behind our back."""
+    data = path.read_bytes()
+    with Image.open(io.BytesIO(data)) as im:
+        w, h = im.size
+        if max(w, h) <= _MAX_SEND_EDGE:
+            return data
+        scale = _MAX_SEND_EDGE / max(w, h)
+        resized = im.convert("RGB").resize(
+            (max(1, round(w * scale)), max(1, round(h * scale))), Image.LANCZOS)
+    return _png_bytes(resized)
+
+
 def _load_image_blocks(paths: list[Path]) -> tuple[list[dict], list[dict]]:
     blocks, meta = [], []
     for p in paths:
-        data = p.read_bytes()
+        data = _read_capped(p)
         blocks.append(_image_block(data))
         meta.append({"path": str(p), "sha256": hashlib.sha256(data).hexdigest()})
+    return blocks, meta
+
+
+def _view_content_blocks(renders_dir: Path) -> tuple[list[dict], list[dict]]:
+    """vision.image_source: views -- every render as its OWN image block at
+    full resolution, preceded by a text block naming its view_id (the sheet
+    cells carry burned-in labels; bare views need the text pairing). A
+    2x3-sheet pixel budget after provider downscaling leaves each 1024 cell
+    at ~437 px; individual 1024 views pass through untouched, so small
+    defects stay visible to API models (docs/VISION_BACKENDS.md)."""
+    blocks, meta = [], []
+    for p in sorted(renders_dir.glob("*.png")):
+        if p.stem.startswith("contact_sheet"):
+            continue
+        data = _read_capped(p)
+        blocks.append({"type": "text", "text": f"view_id: {p.stem}"})
+        blocks.append(_image_block(data))
+        meta.append({"path": str(p), "sha256": hashlib.sha256(data).hexdigest(),
+                     "view_id": p.stem})
     return blocks, meta
 
 
@@ -279,7 +322,8 @@ def inspect_asset(client, *, request: dict, theme: dict, bbox_range: str,
                   contact_sheets: list[Path], renders_dir: Path,
                   iteration: int, contracts: Contracts, config: dict,
                   log_path: Path | None = None,
-                  sleep: Callable[[float], None] = time.sleep) -> StageResult:
+                  sleep: Callable[[float], None] = time.sleep,
+                  scout_client=None) -> StageResult:
     """Run stage V2 for one iteration and return its StageResult (spec 15).
 
     See module docstring for the call/retry/recheck structure. `iteration` is
@@ -287,14 +331,44 @@ def inspect_asset(client, *, request: dict, theme: dict, bbox_range: str,
     logging needs; the report's own `iteration` field is whatever the model
     echoes back and is not itself load-bearing here (validate_report/
     extract_findings never inspect it).
+
+    ``scout_client`` (optional) is a separate, typically LOCAL high-resolution
+    vision client used for an advisory detail pre-pass (spec 15 stays the
+    authority). Its hints are merged into the judge's prompt as suggestions;
+    a scout failure is swallowed and the inspection proceeds unchanged. See
+    :mod:`assetpipe.vision.detail_scout` / docs/VISION_BACKENDS.md.
     """
     category = request["category"]
     model = config["vision"]["model"]
     tool_schema = contracts.report_tool_schema(category)
     tool_def = _tool_def(tool_schema)
 
-    prompt = build_inspection_prompt(request, theme, bbox_range, contracts)
-    image_blocks, images_meta = _load_image_blocks(contact_sheets)
+    # "views" sends every render as its own full-resolution image (labeled
+    # by a preceding text block); "contact_sheets" sends the composed grids
+    # (fewer tokens, but provider-side downscaling costs each cell most of
+    # its pixels -- see _MAX_SEND_EDGE note / docs/VISION_BACKENDS.md).
+    image_source = config["vision"].get("image_source", "contact_sheets")
+    if image_source == "views":
+        image_blocks, images_meta = _view_content_blocks(renders_dir)
+        if not image_blocks:  # no bare renders on disk: fall back to sheets
+            image_source = "contact_sheets"
+    if image_source != "views":
+        image_blocks, images_meta = _load_image_blocks(contact_sheets)
+
+    prompt = build_inspection_prompt(request, theme, bbox_range, contracts,
+                                     image_delivery=image_source)
+
+    # Detail-scout pre-pass (advisory): a local high-res model flags spots for
+    # the judge to look at closely. Failure-isolated inside scout_hints -- an
+    # empty string (scout off, or errored) leaves the prompt unchanged.
+    if scout_client is not None:
+        scout_cfg = config["vision"].get("scout", {})
+        hints_block = detail_scout.scout_hints(
+            scout_client, model=scout_cfg.get("model", model),
+            renders_dir=renders_dir, max_edge=scout_cfg.get("max_edge"),
+            log_path=log_path)
+        if hints_block:
+            prompt = prompt + "\n\n" + hints_block
 
     # NOTE: no temperature/top_p passed. Current Claude models reject sampling
     # parameters entirely; config's vision.temperature: 0 intent is satisfied

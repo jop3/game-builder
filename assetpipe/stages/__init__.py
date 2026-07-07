@@ -47,6 +47,7 @@ from assetpipe.blender_scripts import contact_sheets
 from assetpipe.contracts import Contracts, stage_order
 from assetpipe.fixes.apply import ApplyResult, FixContext, apply_fix_plan
 from assetpipe.loop import InfraError, StageResult
+from assetpipe.matlib.color_words import derive_material_colors
 from assetpipe.rundir import HistoryLog, RunDir
 from assetpipe.validation.image_checks import (check_backface_fraction, check_clipping,
                                                check_not_empty, check_silhouette_area)
@@ -139,6 +140,37 @@ def resolve_params(param_schema: dict, theme: dict, seed: int,
     return params
 
 
+def resolve_slot_materials(slot_keywords, theme_materials) -> list | None:
+    """Resolve a generator's ``SLOT_MATERIALS`` keyword preferences against a
+    theme's material-recipe id list (spec 10.2 "generators may pick per-slot
+    materials", theme-agnostic: the generator names *roles* by keyword, the
+    theme supplies whichever recipes it has).
+
+    ``slot_keywords`` is a sequence of keyword tuples, one per slot, in
+    preference order (e.g. ``(("wood", "plank"), ("iron", "metal"))``); each
+    slot gets the first theme recipe id containing one of its keywords
+    (keyword order wins over list order). A slot with no match falls back to
+    the theme's first recipe -- Blender clamps out-of-range material indices
+    to 0 anyway, so the fallback just makes that collapse explicit. Returns
+    None when nothing resolves beyond that fallback (single-material themes):
+    the caller then keeps the plain single-material bake path.
+    """
+    ids = [m for m in (theme_materials or []) if isinstance(m, str) and m]
+    if not ids or not slot_keywords:
+        return None
+    resolved: list[str] = []
+    any_match = False
+    for keywords in slot_keywords:
+        slot_id = None
+        for keyword in keywords:
+            slot_id = next((m for m in ids if keyword in m), None)
+            if slot_id is not None:
+                any_match = True
+                break
+        resolved.append(slot_id if slot_id is not None else ids[0])
+    return resolved if any_match and len(set(resolved)) > 1 else None
+
+
 def _finding_from_check(check_id: str, defect_type: str, check: dict, view_id: str) -> Finding:
     return Finding(check_id=check_id, defect_type=defect_type, severity=check["severity"],
                   verdict="fail", confidence=1.0, evidence_views=[view_id], location=view_id,
@@ -162,6 +194,7 @@ class SubprocessStages:
     vision_client: object = None
     llm_patch_fn: Callable | None = None
     history: HistoryLog | None = None
+    scout_client: object = None
 
     def __post_init__(self) -> None:
         self.asset_id = self.request["asset_id"]
@@ -214,14 +247,25 @@ class SubprocessStages:
         slot-scoped ``{"recipe": id, "params": {...}}`` objects
         (docs/TEXTURE_WAVE.md item 6) -- normalized here so bake.py sees only
         those two shapes. None -> single ``_material_recipe()`` applies, and
-        a malformed list falls back the same way rather than half-applying."""
+        a malformed list falls back the same way rather than half-applying.
+
+        Description-derived colors (docs/COLOR_WAVE.md item 1) are merged in
+        here, as slot params, via ``matlib.color_words.derive_material_colors``
+        -- pure and deterministic given (description, materials, palette,
+        seed), so the generate() and apply_fix() bake payloads agree."""
         try:
             params = json.loads((iter_dir / "params.json").read_text())
         except (OSError, json.JSONDecodeError, FileNotFoundError):
             return None
         materials = params.get("materials")
         if not (isinstance(materials, list) and materials):
-            return None
+            # No explicit slot list: a generator may still declare per-slot
+            # ROLES (SLOT_MATERIALS keyword tuples) resolved against the
+            # theme's material list -- theme-agnostic multi-slot props
+            # (barrel staves + hoops, lantern metal + glass).
+            materials = self._slot_materials_from_generator()
+            if not materials:
+                return None
         normalized: list = []
         for entry in materials:
             if isinstance(entry, str) and entry:
@@ -232,7 +276,24 @@ class SubprocessStages:
                                    "params": dict(entry.get("params") or {})})
             else:
                 return None
-        return normalized
+        return derive_material_colors(
+            self.request.get("description", ""), normalized,
+            self.theme.get("palette", {}) or {},
+            seed=int(self.request.get("seed", 0)),
+            request_overrides=self.request.get("material_overrides") or {})
+
+    def _slot_materials_from_generator(self) -> list | None:
+        """The generator module's ``SLOT_MATERIALS`` keyword tuples resolved
+        against the theme's material list (see :func:`resolve_slot_materials`);
+        None when the generator declares none, the registry is absent, or
+        nothing resolves beyond the single-material fallback."""
+        gen_id = self.request.get("generator")
+        if not gen_id or self.registry is None or gen_id not in self.registry:
+            return None
+        slot_keywords = getattr(self.registry.get(gen_id), "SLOT_MATERIALS", None)
+        if not slot_keywords:
+            return None
+        return resolve_slot_materials(slot_keywords, self.theme.get("materials"))
 
     def _first_tiling_material(self, materials: list) -> str | None:
         from assetpipe.themes_io import ThemeIOError, load_material_recipe
@@ -603,7 +664,8 @@ class SubprocessStages:
         result = inspect_asset(self.vision_client, request=self.request, theme=self.theme,
                                bbox_range=self._bbox_range(), contact_sheets=contact_sheets,
                                renders_dir=renders_dir, iteration=iteration, contracts=self.contracts,
-                               config=self.config, log_path=log_path)
+                               config=self.config, log_path=log_path,
+                               scout_client=self.scout_client)
 
         warns = self._a_warns + result.warns
         self._a_warns = []

@@ -12,9 +12,16 @@ from assetpipe.contracts import Contracts
 
 # Views whose special semantics the model must know or it will report the
 # harness itself as defects (spec 15.3 / asset-visual-qa skill).
+_LABEL_LINES = {
+    "contact_sheets": "Each contact-sheet cell is labeled with its view_id in "
+                      "the corner.",
+    "views": "Each render is its own full-resolution image, and the text line "
+             "immediately BEFORE each image names its view_id (cite those ids).",
+}
+
 _HARNESS_NOTES = """\
 RENDER SET
-Each contact-sheet cell is labeled with its view_id in the corner. Lighting rigs:
+{label_line} Lighting rigs:
 L1 = neutral studio HDRI; lit_warm_* = warm directional sun; lit_dark_090 = dim blue
 rim light (dark regions there are EXPECTED - judge texture presence by the rim-lit
 edge only). silhouette_* views are white-on-black by design and show the asset ONLY
@@ -49,7 +56,8 @@ def _fill_criteria(text: str, slots: dict[str, str]) -> str:
 
 
 def build_inspection_prompt(request: dict, theme: dict, bbox_range: str,
-                            contracts: Contracts) -> str:
+                            contracts: Contracts,
+                            image_delivery: str = "contact_sheets") -> str:
     checks = contracts.applicable_checks(request["category"])
     palette = theme.get("palette", {})
     allowed = ", ".join(
@@ -88,7 +96,9 @@ def build_inspection_prompt(request: dict, theme: dict, bbox_range: str,
         f"- theme palette (allowed dominant hues): {slots['palette']}; "
         f"forbidden: {slots['forbidden']}\n"
         f"- expected real-world size range: {bbox_range}",
-        _HARNESS_NOTES,
+        _HARNESS_NOTES.replace(
+            "{label_line}",
+            _LABEL_LINES.get(image_delivery, _LABEL_LINES["contact_sheets"])),
         "CHECKS - evaluate every one of: " + ", ".join(checks) + "\n\n"
         + "\n".join(check_lines),
         "DEFECT TAXONOMY (defect_type must be one of):\n"

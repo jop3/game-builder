@@ -18,6 +18,10 @@ PARAM_SCHEMA = {
     "properties": {
         "cell_scale": {"type": "number", "minimum": 3.0, "maximum": 14.0, "default": 6.0},
         "moss": {"type": "number", "minimum": 0.0, "maximum": 1.0, "default": 0.4},
+        # Explicit stone color ("#RRGGBB"), e.g. description-driven
+        # (docs/COLOR_WAVE.md item 1). Empty -> sampled from ``secondary``.
+        # (No color2_hex: this recipe derives its own darker tones.)
+        "color1_hex": {"type": "string", "default": ""},
     },
     "additionalProperties": False,
 }
@@ -41,7 +45,8 @@ def build(nt, params: dict, rng, palette_dict: dict) -> None:
     # ``secondary`` holds the theme's stone greys; ``primary`` is the timber
     # browns and made stonework read as warm sand (house plinth, phase 4).
     # Darkened toward the reference's grey cobbles.
-    r, g, b = palette.sample_palette_color(palette_dict, "secondary", rng)
+    r, g, b = (palette.hex_to_rgb(params["color1_hex"]) if params.get("color1_hex")
+               else palette.sample_palette_color(palette_dict, "secondary", rng))
     base = (r * 0.72, g * 0.74, b * 0.78)
 
     # Cobble cells: distance-to-edge -> explicit grout mask (1 IN the grout).
@@ -51,8 +56,10 @@ def build(nt, params: dict, rng, palette_dict: dict) -> None:
     vor_edge.inputs["Scale"].default_value = params["cell_scale"]
     grout_mask = nt.nodes.new("ShaderNodeMapRange")
     nt.links.new(vor_edge.outputs["Distance"], grout_mask.inputs["Value"])
+    # From Max 0.085 (was 0.07): the grout thinned to invisibility after the
+    # web shrink pass -- slightly wider lines survive it (COLOR_WAVE item 3).
     grout_mask.inputs["From Min"].default_value = 0.01
-    grout_mask.inputs["From Max"].default_value = 0.07
+    grout_mask.inputs["From Max"].default_value = 0.085
     grout_mask.inputs["To Min"].default_value = 1.0
     grout_mask.inputs["To Max"].default_value = 0.0
 
@@ -91,24 +98,30 @@ def build(nt, params: dict, rng, palette_dict: dict) -> None:
 
     # Moss accent: layered-noise mask (periodic domain, stays seamless) mixes
     # toward a desaturated green built FROM the sampled grey.
+    # Scale 2.0 (was 2.6): bigger moss patches so the accent still reads
+    # after the web shrink pass (COLOR_WAVE item 3).
     moss_noise = nt.nodes.new("ShaderNodeTexNoise")
     nt.links.new(periodic.outputs["Vector"], moss_noise.inputs["Vector"])
-    moss_noise.inputs["Scale"].default_value = 2.6
+    moss_noise.inputs["Scale"].default_value = 2.0
     moss_noise.inputs["Detail"].default_value = 4.0
+    # Ramp widened (0.50/0.68) and mix deepened (drop the 0.8 damping,
+    # greener target): at the shipped 512 albedo the old dark-olive moss
+    # read as plain grey-brown in beauty/turn renders (COLOR_WAVE item 3;
+    # still derived from the sampled grey, so palette-traceable).
     moss_ramp = nt.nodes.new("ShaderNodeValToRGB")
-    moss_ramp.color_ramp.elements[0].position = 0.52
-    moss_ramp.color_ramp.elements[1].position = 0.72
+    moss_ramp.color_ramp.elements[0].position = 0.50
+    moss_ramp.color_ramp.elements[1].position = 0.68
     nt.links.new(moss_noise.outputs["Fac"], moss_ramp.inputs["Fac"])
     moss_fac = nt.nodes.new("ShaderNodeMath")
     moss_fac.operation = "MULTIPLY"
     nt.links.new(moss_ramp.outputs["Color"], moss_fac.inputs[0])
-    moss_fac.inputs[1].default_value = params["moss"] * 0.8
+    moss_fac.inputs[1].default_value = params["moss"]
     mossed = nt.nodes.new("ShaderNodeMix")
     mossed.data_type = "RGBA"
     nt.links.new(moss_fac.outputs[0], mossed.inputs[0])
     nt.links.new(tinted.outputs[2], mossed.inputs[6])
-    mossed.inputs[7].default_value = (base[0] * 0.5, base[1] * 0.72,
-                                      base[2] * 0.38, 1.0)
+    mossed.inputs[7].default_value = (base[0] * 0.32, base[1] * 0.78,
+                                      base[2] * 0.22, 1.0)
 
     # Dark grout lines over everything (moss survives only on the stones).
     grout = nt.nodes.new("ShaderNodeMix")

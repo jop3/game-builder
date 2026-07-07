@@ -21,7 +21,15 @@ PARAM_SCHEMA = {
         # Overall map brightness: 4.0 bakes the pane peak at full scale
         # (values above 1 clamp into the white-hot cores by design).
         "glow_strength": {"type": "number", "minimum": 0.5, "maximum": 10.0, "default": 4.0},
-        "pane_scale": {"type": "number", "minimum": 2.0, "maximum": 12.0, "default": 6.0},
+        "pane_scale": {"type": "number", "minimum": 2.0, "maximum": 24.0, "default": 6.0},
+        # Extra warm shift toward lamplight orange on top of the base warm
+        # bias (COLOR_WAVE item 4 / accessories: a lantern slot pins ~1.0
+        # so its glass reads as flame, not the windows' pale gold).
+        "warmth": {"type": "number", "minimum": 0.0, "maximum": 1.0, "default": 0.0},
+        # How strongly the AO mullion/frame bars darken the emissive.
+        # 1.0 = the window look. A lantern pane is small enough that its
+        # cage/bracket AO would dim the WHOLE pane grey -- its slot pins 0.
+        "bar_strength": {"type": "number", "minimum": 0.0, "maximum": 1.0, "default": 1.0},
     },
     "additionalProperties": False,
 }
@@ -41,8 +49,10 @@ def build(nt, params: dict, rng, palette_dict: dict) -> None:
 
     # Warm-biased draw from the emissive group: pull green/blue down so the
     # glow reads lamplit gold-orange, not pale yellow, in dark shots.
+    # ``warmth`` pulls green/blue down further toward flame orange.
     r, g, b = palette.sample_palette_color(palette_dict, "emissive", rng)
-    warm = (min(1.0, r * 1.05), g * 0.82, b * 0.5)
+    w = params.get("warmth", 0.0)
+    warm = (min(1.0, r * 1.05), g * 0.82 * (1.0 - 0.30 * w), b * 0.5 * (1.0 - 0.65 * w))
 
     # Soft interior unevenness so the glow reads as lamplight through glass,
     # not a uniform LED panel (theme brief: torch-lit, hand-built).
@@ -62,10 +72,13 @@ def build(nt, params: dict, rng, palette_dict: dict) -> None:
     center_bias.inputs["Scale"].default_value = 1.4
     center_bias.inputs["Detail"].default_value = 1.0
     nt.links.new(tex_coord.outputs["Object"], center_bias.inputs["Vector"])
+    # To Max 1.2 (was 1.35): the dormer pane sat on a bias peak and its
+    # whole pane clamped paler than the main windows -- narrower bias keeps
+    # pane cores gold with only small white-hot spots (COLOR_WAVE item 4).
     bias_var = nt.nodes.new("ShaderNodeMapRange")
     nt.links.new(center_bias.outputs["Fac"], bias_var.inputs["Value"])
     bias_var.inputs["To Min"].default_value = 0.62
-    bias_var.inputs["To Max"].default_value = 1.35
+    bias_var.inputs["To Max"].default_value = 1.2
 
     # Mullion cross + frame recess as dark bars: the cross bars and frame are
     # real geometry over the pane, so tight-radius AO darkens exactly the
@@ -78,6 +91,12 @@ def build(nt, params: dict, rng, palette_dict: dict) -> None:
     ao_sharp.inputs["From Max"].default_value = 0.85
     ao_sharp.inputs["To Min"].default_value = 0.08
     ao_sharp.inputs["To Max"].default_value = 1.0
+    # bar_strength fades the bars out: lerp(1, sharpened AO, bar_strength).
+    bars = nt.nodes.new("ShaderNodeMix")
+    bars.data_type = "FLOAT"
+    bars.inputs[0].default_value = params.get("bar_strength", 1.0)
+    bars.inputs[2].default_value = 1.0
+    nt.links.new(ao_sharp.outputs["Result"], bars.inputs[3])
 
     brightness = nt.nodes.new("ShaderNodeMath")
     brightness.operation = "MULTIPLY"
@@ -86,7 +105,7 @@ def build(nt, params: dict, rng, palette_dict: dict) -> None:
     barred = nt.nodes.new("ShaderNodeMath")
     barred.operation = "MULTIPLY"
     nt.links.new(brightness.outputs[0], barred.inputs[0])
-    nt.links.new(ao_sharp.outputs["Result"], barred.inputs[1])
+    nt.links.new(bars.outputs[0], barred.inputs[1])
     # glow_strength/4: the default bakes the pane peak at full map scale;
     # higher values push more of the pane into the clamped white core.
     strength = nt.nodes.new("ShaderNodeMath")

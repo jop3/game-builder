@@ -7,15 +7,39 @@ toolchain:
   require_exact: true
 
 vision:
-  model: "claude-fable-5"
+  model: "claude-fable-5"     # any vision model the selected client can reach (--vision-model)
   temperature: 0
   max_retries: 1              # schema/semantic-validation retries per call
   max_recheck_rounds: 1       # 'uncertain' crop re-queries per iteration (spec 15.5)
   max_concurrent_calls: 4
-  client: "api"               # api | agent (file-exchange; a driving agent's own vision)
+  # What the model inspects. "views" = every render as its OWN image at full
+  # resolution, labeled by a preceding text line (recommended for API models:
+  # providers downscale big images -- a 2048x3072 contact sheet lands at
+  # ~875x1313 model-side, leaving each 1024 cell ~437 px and hiding small
+  # defects). "contact_sheets" = the composed 2x3 grids (fewer tokens).
+  image_source: "views"
+  # api    = Anthropic SDK (ANTHROPIC_API_KEY; ANTHROPIC_BASE_URL for proxies)
+  # openai = any OpenAI-compatible chat-completions endpoint -- OpenAI, Gemini
+  #          compat, OpenRouter, vLLM, Ollama, ... (docs/VISION_BACKENDS.md)
+  # agent  = file-exchange; a driving agent's own vision (agent_client.py)
+  client: "api"
+  base_url: null              # openai client endpoint (--vision-base-url / $OPENAI_BASE_URL)
+  api_key_env: null           # env var holding the openai client's key (default OPENAI_API_KEY)
+  request_timeout_s: 300      # per-request timeout for the openai client
   agent_exchange_dir: null    # required when client: agent (--vision-exchange)
   agent_poll_s: 2
   agent_timeout_s: 1800
+  # Detail scout (optional, advisory): a SEPARATE local high-resolution VLM
+  # pre-scans the renders and flags spots for the judge to look at closely --
+  # native resolution beats a cloud judge's downscaled view, and hints are
+  # advisory so a weak scout never fails an asset (docs/VISION_BACKENDS.md).
+  # Enabled by --vision-scout-url (config: scout.base_url); off when null.
+  scout:
+    base_url: null            # OpenAI-compatible endpoint (e.g. http://localhost:11434/v1)
+    model: null               # scout VLM id (e.g. qwen2.5vl); defaults to vision.model
+    api_key_env: null         # env var for the scout's key (default OPENAI_API_KEY)
+    max_edge: null            # optional downscale cap for scout images (null = native res)
+    request_timeout_s: 120
 
 iteration:
   max_iterations: 5

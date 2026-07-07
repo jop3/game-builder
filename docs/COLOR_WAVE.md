@@ -7,6 +7,80 @@ INTELLIGENCE (requests should not need hand-written hex overrides) and
 making the painted detail SURVIVE the web budget. This file is
 self-contained for a fresh session.
 
+## Status (2026-07-07, branch `claude/colors-textures-q7snil`)
+
+Items 1-5 LANDED; the acceptance run passed (see the section at the bottom
+for what was verified). Item-by-item notes for whoever continues:
+
+1. **Description-driven color** -- `assetpipe/matlib/color_words.py` (pure
+   Python; tests in `test_color_words.py`): lexicon -> noun binding
+   (2-token window before roof/wall/door/window/trim/banner/plinth) ->
+   HSV-nearest palette snap over primary/secondary/accent (hue weighted 6x
+   mean saturation; tolerance 0.5; raw-anchor fallback jittered through
+   the spec-10.5 bounds) -> slot params via the item-6 plumbing, injected
+   in `stages._material_recipes`. Derivation is WITHHELD for a slot when
+   the request's `material_overrides` pins any of the same keys (slot
+   params beat the request dict in bake.py, so emitting would invert
+   "explicit overrides win"). aged_wood/stone_wall/iron_trim/cloth_banner
+   now accept `color1_hex` (+`color2_hex` where used) so color words work
+   beyond the roof.
+2. **Priority-aware shrink_textures** -- normal+orm halve first (256 px
+   soft floor), then albedo, emissive last; a 64 px hard pass keeps the
+   loop convergent. Seed-77 real numbers: 6.8 MiB glb -> normal/orm
+   1024->256, albedo 1024->512 (its 1024 PNG is 4.8 MiB, alone over the
+   3 MiB cap -- no ordering can save it), emissive kept at 512 ->
+   0.84 MiB shipped. The window read survives untouched.
+3. **Moss/plinth** -- moss noise scale 2.0, plinth slot moss 0.55, grout
+   From Max 0.085, and (after the first validated run still read
+   grey-brown) a greener/deeper moss mix: ramp 0.50/0.68, mix factor
+   `params["moss"]` undamped, target (base*0.32, *0.78, *0.22) -- still
+   derived from the sampled secondary grey, so palette-traceable. Item 6
+   (a real palette green) stays unnecessary.
+4. **Window glow** -- bias_var To Max 1.35 -> 1.2; the dormer pane now
+   bakes gold like the main windows. The lantern still shares
+   SLOT_GLASS/window material (acceptable, unchanged).
+5. **Painted trim/banner** -- iron_trim: per-segment cell_jitter value
+   jitter + bare-steel edge highlights (+`edge_highlight` param);
+   cloth_banner: per-patch dye jitter + noise-broken sun-fade height
+   gradient (+`sun_fade` param).
+
+## Accessories follow-up (same day, same branch)
+
+The dressing/prop accessories landed and verified after the color wave:
+
+- **House dressing**: barrels grew proud iron hoop rings; the door
+  lantern got a forged-iron bracket + cage plates and a DEDICATED glass
+  slot (`fantasy_window_glow` grew `warmth` + `bar_strength` params; the
+  lantern slot pins warmth 1.0 / bars 0.0 / pane_scale 18) -- it now
+  glows flame-orange, clearly distinct from the windows' gold, in
+  lit_dark and beauty shots. House slots are now 6 (walls, roof, window
+  glass, stone, iron, lantern glass).
+- **props/barrel**: stave-wood body + raised iron hoop rings on separate
+  slots (the old single-material insets read as scratches).
+- **props/lantern**: REAL vertical cage bars (metal slot) around the
+  glass shell (glow slot); the bars' AO paints into the emissive like
+  the house mullions.
+- **SLOT_MATERIALS plumbing** (`stages.resolve_slot_materials`):
+  generators declare per-slot keyword tuples (("wood","plank"),
+  ("iron","metal"), ...) resolved against the theme's material list when
+  the request/params carry no explicit `materials` -- theme-agnostic
+  multi-slot props; single-material themes collapse gracefully.
+- **fantasy_iron_trim rebuilt**: the first barrel verification run
+  showed cream hoops -- `metal_base`'s Color output mixes toward WHITE
+  with its breakup noise (fine for sci-fi hull), the accent draw is
+  gold, and a tinted 1.8x edge highlight blanketed the thin rings. The
+  recipe now builds its own near-neutral dark-iron color (accent tint
+  0.055x -- 0.16x still read khaki), hammered value variation, and
+  neutral bare-steel edge highlights (radius 0.008, sharpness 0.72,
+  factor halved); `metal_base` supplies only roughness/metallic.
+
+Verified 2026-07-07: a 3-asset batch (seed-77 house, barrel seed 11,
+lantern seed 5, all fantasy_medieval/web, no material_overrides) ran to
+`validated: 3` with the agent vision client -- barrel/lantern slot lists
+came from SLOT_MATERIALS resolution, every R-check passed by real
+vision, and beauty shots confirm dark forged hoops, the flame-orange
+lantern, and the house dressing. 489 unit tests green.
+
 ## Bootstrap (~10 min)
 
     bash scripts/setup_toolchain.sh && export PATH=/opt/toolchain/bin:$PATH
@@ -113,3 +187,13 @@ panes on every window including the dormer. All ~460 unit tests green,
 plus new pure-Python tests for the color-word mapping. Keep every rubric
 check passing — S16/S17/A1 must not regress (thresholds in
 assetpipe/config/defaults.yaml).
+
+**MET (2026-07-07, branch `claude/colors-textures-q7snil`).** Two full
+agent-vision runs of the no-overrides request reached `validated`
+(iteration 2 shipped; iteration 1's S20d FILE_TOO_LARGE resolved by the
+priority-aware shrink): bake payload carried the derived roof params
+color1_hex #8A1E1E / color2_hex #6E1818 with `material_params: {}`;
+every R-check passed by real vision in both runs; the second run's
+beauty shot shows the oxblood roof, warm gold panes (dormer included),
+legible per-plank/per-tile variation at the shipped 512 albedo, and
+clearly visible moss on the plinth. 484 unit tests green.
