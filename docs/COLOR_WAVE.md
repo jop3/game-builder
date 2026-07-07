@@ -40,10 +40,46 @@ for what was verified). Item-by-item notes for whoever continues:
    bakes gold like the main windows. The lantern still shares
    SLOT_GLASS/window material (acceptable, unchanged).
 5. **Painted trim/banner** -- iron_trim: per-segment cell_jitter value
-   jitter + base-tinted edge highlights (+`edge_highlight` param);
+   jitter + bare-steel edge highlights (+`edge_highlight` param);
    cloth_banner: per-patch dye jitter + noise-broken sun-fade height
-   gradient (+`sun_fade` param). Verified graph-build in real Blender;
-   not yet exercised by a generator recipe.
+   gradient (+`sun_fade` param).
+
+## Accessories follow-up (same day, same branch)
+
+The dressing/prop accessories landed and verified after the color wave:
+
+- **House dressing**: barrels grew proud iron hoop rings; the door
+  lantern got a forged-iron bracket + cage plates and a DEDICATED glass
+  slot (`fantasy_window_glow` grew `warmth` + `bar_strength` params; the
+  lantern slot pins warmth 1.0 / bars 0.0 / pane_scale 18) -- it now
+  glows flame-orange, clearly distinct from the windows' gold, in
+  lit_dark and beauty shots. House slots are now 6 (walls, roof, window
+  glass, stone, iron, lantern glass).
+- **props/barrel**: stave-wood body + raised iron hoop rings on separate
+  slots (the old single-material insets read as scratches).
+- **props/lantern**: REAL vertical cage bars (metal slot) around the
+  glass shell (glow slot); the bars' AO paints into the emissive like
+  the house mullions.
+- **SLOT_MATERIALS plumbing** (`stages.resolve_slot_materials`):
+  generators declare per-slot keyword tuples (("wood","plank"),
+  ("iron","metal"), ...) resolved against the theme's material list when
+  the request/params carry no explicit `materials` -- theme-agnostic
+  multi-slot props; single-material themes collapse gracefully.
+- **fantasy_iron_trim rebuilt**: the first barrel verification run
+  showed cream hoops -- `metal_base`'s Color output mixes toward WHITE
+  with its breakup noise (fine for sci-fi hull), the accent draw is
+  gold, and a tinted 1.8x edge highlight blanketed the thin rings. The
+  recipe now builds its own near-neutral dark-iron color (accent tint
+  0.055x -- 0.16x still read khaki), hammered value variation, and
+  neutral bare-steel edge highlights (radius 0.008, sharpness 0.72,
+  factor halved); `metal_base` supplies only roughness/metallic.
+
+Verified 2026-07-07: a 3-asset batch (seed-77 house, barrel seed 11,
+lantern seed 5, all fantasy_medieval/web, no material_overrides) ran to
+`validated: 3` with the agent vision client -- barrel/lantern slot lists
+came from SLOT_MATERIALS resolution, every R-check passed by real
+vision, and beauty shots confirm dark forged hoops, the flame-orange
+lantern, and the house dressing. 489 unit tests green.
 
 ## Bootstrap (~10 min)
 
