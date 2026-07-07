@@ -267,6 +267,31 @@ def test_resolve_params_integer_params_stay_integer():
 
 
 # ---------------------------------------------------------------------------
+# _texture_budgets: the max_texture_px override must reach the BAKE (spec 6/8)
+# ---------------------------------------------------------------------------
+
+def test_texture_budgets_default_matches_profile(tmp_path, fake_blender):
+    stages, _ = make_stages(tmp_path, fake_blender)
+    profile_tex = C.profile(REQUEST["platform_profile"])["textures"][CATEGORY]
+    albedo, budgets = stages._texture_budgets(CATEGORY)
+    assert budgets == profile_tex
+    assert albedo == profile_tex["albedo"]
+
+
+def test_texture_budgets_applies_max_texture_px_override_per_map(tmp_path, fake_blender):
+    # Regression: the override tightened only V1's S14 threshold, not the bake,
+    # so the bake emitted profile-resolution maps that failed S14 -- an
+    # unfixable loop. The bake budget must now honor the override too.
+    req = {**REQUEST, "budget_overrides": {"max_texture_px": 512}}
+    stages, _ = make_stages(tmp_path, fake_blender, request=req)
+    profile_tex = C.profile(REQUEST["platform_profile"])["textures"][CATEGORY]
+    albedo, budgets = stages._texture_budgets(CATEGORY)
+    assert albedo == min(profile_tex["albedo"], 512)
+    for name, px in profile_tex.items():
+        assert budgets[name] == min(px, 512)   # per-map min, mirrors static_gate
+
+
+# ---------------------------------------------------------------------------
 # _run_blender: retry-once-then-InfraError (spec 4.3)
 # ---------------------------------------------------------------------------
 

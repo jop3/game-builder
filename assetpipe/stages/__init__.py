@@ -215,6 +215,23 @@ class SubprocessStages:
     def _profile(self) -> dict:
         return self.contracts.profile(self.request["platform_profile"])
 
+    def _texture_budgets(self, category: str) -> tuple[int, dict]:
+        """Per-map bake resolution for a category, with the ``max_texture_px``
+        budget override applied (spec 6/8: overrides may only TIGHTEN).
+
+        The override must reach the BAKE, not merely V1's S14 threshold:
+        otherwise the bake emits full-profile-resolution maps that then fail
+        S14 against the tightened threshold, and no fix converges (observed as
+        an unfixable TEX_RESOLUTION_INVALID + FILE_TOO_LARGE loop). Mirrors the
+        per-map ``min()`` in validation/static_gate.py so bake and check agree.
+        Returns (albedo_budget, per_map_budget_dict)."""
+        budgets = dict(self._profile().get("textures", {}).get(category, {}))
+        cap = (self.request.get("budget_overrides") or {}).get("max_texture_px")
+        if cap is not None:
+            budgets = {k: min(v, int(cap)) for k, v in budgets.items()}
+        albedo = budgets.get("albedo", min(1024, int(cap)) if cap is not None else 1024)
+        return albedo, budgets
+
     def _material_recipe(self) -> str | None:
         """Material recipe id for the bake payload. theme.json's ``materials``
         is a *list* of recipe ids legal for the theme (spec 7); generators may
@@ -376,7 +393,7 @@ class SubprocessStages:
         gen_result = self._read_json(iter_dir / "result.json")
         root_object = gen_result.get("root_object")
 
-        texture_budget = profile.get("textures", {}).get(category, {}).get("albedo", 1024)
+        texture_budget, texture_resolutions = self._texture_budgets(category)
         material_recipe = self._material_recipe()
         self._run_blender("bake.py", iter_dir,
                           {"object_name": root_object, "material_recipe": material_recipe,
@@ -386,7 +403,7 @@ class SubprocessStages:
                            "palette": self.theme.get("palette", {}), "seed": seed,
                            "asset_dir": str(iter_dir), "out_dir": str(iter_dir),
                            "texture_resolution": texture_budget,
-                           "texture_resolutions": profile.get("textures", {}).get(category, {}),
+                           "texture_resolutions": texture_resolutions,
                            "tiling": category == "tiling_texture_set",
                            "iteration": iteration},
                           "bake", blend_path=iter_dir / "asset.blend")
@@ -465,8 +482,7 @@ class SubprocessStages:
             # their ctx, and the rebake-family fixes hand it to
             # bake.bake_all_maps -- so it must carry the full bake context,
             # not just the mesh-fix keys (verified against real Blender).
-            texture_budget = (self._profile().get("textures", {})
-                              .get(self.request["category"], {}).get("albedo", 1024))
+            texture_budget, texture_resolutions = self._texture_budgets(self.request["category"])
             self._run_blender("fixes.py", iter_dir,
                               {"asset_id": self.asset_id, "iteration": iteration,
                                "actions": result.blender_actions, "asset_dir": str(iter_dir),
@@ -478,8 +494,7 @@ class SubprocessStages:
                                "palette": self.theme.get("palette", {}),
                                "seed": self.request["seed"],
                                "texture_resolution": texture_budget,
-                               "texture_resolutions": (self._profile().get("textures", {})
-                                                       .get(self.request["category"], {})),
+                               "texture_resolutions": texture_resolutions,
                                "tiling": self.request["category"] == "tiling_texture_set"},
                               "fixes", blend_path=iter_dir / "asset.blend")
 
@@ -495,7 +510,7 @@ class SubprocessStages:
             gen_result = self._read_json(iter_dir / "result.json")
             root_object = gen_result.get("root_object")
         if resume in ("G", "M"):
-            texture_budget = profile.get("textures", {}).get(category, {}).get("albedo", 1024)
+            texture_budget, texture_resolutions = self._texture_budgets(category)
             material_recipe = self._material_recipe()
             self._run_blender("bake.py", iter_dir,
                               {"object_name": root_object, "material_recipe": material_recipe,
@@ -505,7 +520,7 @@ class SubprocessStages:
                                "palette": self.theme.get("palette", {}),
                                "seed": self.request["seed"], "asset_dir": str(iter_dir),
                                "out_dir": str(iter_dir), "texture_resolution": texture_budget,
-                               "texture_resolutions": profile.get("textures", {}).get(category, {}),
+                               "texture_resolutions": texture_resolutions,
                                "tiling": category == "tiling_texture_set", "iteration": iteration},
                               "bake", blend_path=iter_dir / "asset.blend")
         if map_actions:
