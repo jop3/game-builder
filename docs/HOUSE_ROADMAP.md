@@ -37,10 +37,10 @@ vision, tune, commit.
 
 - [ ] Two-mass build: main tall gable volume + attached lower wing with its
       own roof (param `wing: 0|1`, sizes relative to main).
-- [ ] Wall plank relief: corner posts + horizontal beam at storey line +
+- [x] Wall plank relief: corner posts + horizontal beam at storey line +
       subtle per-board depth (inset strips), so silhouettes stop reading as
       extruded rectangles. Watch the 3000-tri web budget.
-- [ ] Shingle rows as coarse geometry: 8–12 slightly overlapping course
+- [x] Shingle rows as coarse geometry: 8–12 slightly overlapping course
       slabs per slope with eave-line jitter (the reference's wavy edge).
 
 ## Phase 4 — Scene dressing (reuse existing generators as parts)
