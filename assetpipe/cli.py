@@ -46,6 +46,10 @@ def _config(args) -> dict:
         cfg["vision"]["client"] = args.vision_client
     if getattr(args, "vision_exchange", None):
         cfg["vision"]["agent_exchange_dir"] = args.vision_exchange
+    if getattr(args, "vision_model", None):
+        cfg["vision"]["model"] = args.vision_model
+    if getattr(args, "vision_base_url", None):
+        cfg["vision"]["base_url"] = args.vision_base_url
     return cfg
 
 
@@ -230,10 +234,14 @@ def _anthropic_client():
 
 
 def _vision_client_factory(cfg: dict):
-    """API client by default; vision.client: agent swaps in the file-exchange
-    client so a driving agent's own vision does V2 (agent_client docstring)."""
+    """Anthropic API client by default. ``vision.client: agent`` swaps in the
+    file-exchange client so a driving agent's own vision does V2
+    (agent_client docstring); ``vision.client: openai`` swaps in the
+    OpenAI-compatible adapter so ANY chat-completions endpoint/model can run
+    the loop (openai_client docstring, docs/VISION_BACKENDS.md)."""
     vision = cfg.get("vision", {})
-    if vision.get("client", "api") == "agent":
+    client = vision.get("client", "api")
+    if client == "agent":
         from assetpipe.vision.agent_client import AgentVisionClient
         exchange = vision.get("agent_exchange_dir")
         if not exchange:
@@ -242,6 +250,12 @@ def _vision_client_factory(cfg: dict):
         return lambda: AgentVisionClient(
             Path(exchange), poll_s=float(vision.get("agent_poll_s", 2)),
             timeout_s=float(vision.get("agent_timeout_s", 1800)))
+    if client == "openai":
+        from assetpipe.vision.openai_client import API_KEY_ENV, OpenAIVisionClient
+        return lambda: OpenAIVisionClient(
+            base_url=vision.get("base_url"),
+            api_key_env=vision.get("api_key_env") or API_KEY_ENV,
+            timeout_s=float(vision.get("request_timeout_s", 300)))
     return lambda: _anthropic_client()
 
 
@@ -253,7 +267,13 @@ def build_parser() -> argparse.ArgumentParser:
     def common(p):
         p.add_argument("--config", help="pipeline.yaml overriding config/defaults.yaml")
         p.add_argument("--blender-bin", default="blender")
-        p.add_argument("--vision-client", choices=["api", "agent"], default=None,
+        p.add_argument("--vision-model", default=None,
+                       help="vision model id override (config: vision.model)")
+        p.add_argument("--vision-base-url", default=None,
+                       help="OpenAI-compatible endpoint base URL for "
+                            "--vision-client openai (config: vision.base_url; "
+                            "env: OPENAI_BASE_URL)")
+        p.add_argument("--vision-client", choices=["api", "openai", "agent"], default=None,
                        help="override vision.client (agent = file-exchange V2)")
         p.add_argument("--vision-exchange", default=None,
                        help="exchange dir for --vision-client agent")

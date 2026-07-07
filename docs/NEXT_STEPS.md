@@ -92,6 +92,11 @@ against the real endpoint) still needs an `ANTHROPIC_API_KEY` run.
    (agent client, see above); what remains is the live-endpoint call shape
    + retry policy, then the labeled fixture corpus (§21.1 rendered fault
    fixtures) and the ≥90%-catch / 0-blocker-FP regression.
+   The loop is no longer Anthropic-only: `--vision-client openai` +
+   `--vision-model`/`--vision-base-url` runs V2 against any
+   OpenAI-compatible endpoint (OpenAI/Gemini/OpenRouter/vLLM/Ollama), with
+   weak-model fallbacks — see docs/VISION_BACKENDS.md. The fixture corpus
+   is also the right harness for qualifying those models.
    `assetpipe/tests/test_inspector.py`'s fakes document the expected
    response shapes.
    Quality follow-ups from the house run: material selection honoring
