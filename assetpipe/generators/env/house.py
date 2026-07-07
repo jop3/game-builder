@@ -177,10 +177,15 @@ def generate(params: dict, rng, theme: dict):
                 size, cen = (thick, sz_along, sz_z), (sign * w / 2.0, along + o_along, cz + o_z)
             _box(bm, size, cen, slot)
 
+        # Jambs overlap INTO the head/sill bars and are fractionally thinner/
+        # narrower: exactly-coincident joint planes get welded by the
+        # finishing pass's remove_doubles into 4-faces-per-edge non-manifold
+        # seams (12 of them failed S1 on the LODs) -- strict overlap with
+        # unequal extents keeps every box manifold on its own.
         place(ww + 2 * bar, bar, frame_t, 0, wh / 2.0 + bar / 2.0, SLOT_WALLS)   # head
         place(ww + 2 * bar, bar, frame_t, 0, -wh / 2.0 - bar / 2.0, SLOT_WALLS)  # sill
-        place(bar, wh, frame_t, -(ww + bar) / 2.0, 0, SLOT_WALLS)                # jambs
-        place(bar, wh, frame_t, (ww + bar) / 2.0, 0, SLOT_WALLS)
+        place(bar * 0.96, wh + bar, frame_t * 0.94, -(ww + bar) / 2.0, 0, SLOT_WALLS)
+        place(bar * 0.96, wh + bar, frame_t * 0.94, (ww + bar) / 2.0, 0, SLOT_WALLS)
         if glass:
             place(ww, wh, pane_t, 0, 0, SLOT_GLASS)                              # pane
             place(bar * 0.6, wh, frame_t * 0.9, 0, 0, SLOT_WALLS)                # mullions
