@@ -192,10 +192,25 @@ while true:
 Because every time-dependent value (animation phase, camera azimuth, event timing) reads
 from the dt-summed `_elapsed` and never from wall-clock delta, the render is **bit-stable
 and FPS-locked** regardless of how slowly software-Vulkan (lavapipe) actually paints each
-frame. Stitch with `ffmpeg -framerate <fps> -i frame_%04d.png ...`. A slow camera pan is
-just `azimuth = A * sin(TAU * _elapsed / period)` around the subject's centre — keep the
-amplitude modest (±30°) and the orbit radius constant so the subject stays framed at both
-extremes (verify the extreme frames, not just the middle).
+frame. Stitch with `ffmpeg -framerate <fps> -i frame_%04d.png ...`.
+
+Corollaries that bite when you make the camera cinematic:
+
+- **Everything time-driven must read `_elapsed`, including effects.** A `GPUParticles3D`/
+  `CPUParticles3D` system advances on the engine's *real* frame delta — under slow
+  software rendering each frame is seconds of wall-clock, so the sim burns through a whole
+  puff in one frame and is non-deterministic. Animate "smoke"/flash/shake **by hand** from
+  your `dt` (billboarded quads whose position/scale/alpha you step yourself), same as the
+  game state.
+- **A straight-down camera can't use `look_at`** — when the view direction is parallel to
+  the up hint the basis is degenerate (the image twists or NaNs). Build the basis by hand:
+  derive `right` from the orbit azimuth (`Vector3(cos(az),0,-sin(az))`, always well-defined),
+  then `up = backward.cross(right)`, re-orthogonalize, and set `global_transform`. This also
+  makes a top-down shot rotate smoothly as the azimuth spins.
+- **To land a move exactly on a game event** (e.g. the camera settling as the game ends),
+  sum the timeline's exact duration up front from the same constants `_step` consumes, then
+  key the move to `clampf(_elapsed / total, 0, 1)` through a `smoothstep`. Verify the
+  *extreme* frames (first, mid-descent, last), not just the middle.
 
 **Audio: headless has no audio driver** (`AudioServer` falls back to the dummy driver — no
 sound reaches the PNG frames). So you cannot "record" audio inline. Instead make it

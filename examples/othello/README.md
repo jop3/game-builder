@@ -37,7 +37,8 @@ game/
   test_rules.gd   14 headless checks incl. verify-the-verifier fixtures
   audio.gd        procedural PCM SFX (place / flip / win) — no audio assets
   othello.gd/.tscn  loads the .glb at runtime, plays a full bot-vs-bot game,
-                    animates the flip cascade, slow-pans the camera, records deterministically
+                    animates the flip cascade, flies a cinematic spiral camera,
+                    fires drama FX on big cascades, records deterministically
   mux_audio.py    overlays the procedural soundtrack onto a recorded mp4 (headless has no audio)
   assets/board.glb  the validated reversi_classic green-felt board (black frame)
   assets/disc.glb   the validated TWO-TONE disc (black one face, white the other)
@@ -80,8 +81,11 @@ look evolved across three themes as the design was refined:
    rim) so a capture is a genuine 180° **turn-over**, not a colour swap. The
    `game/` scene stages it like the real set: light tabletop, side trays of
    striped discs lying in their channels, restrained lighting so black reads
-   black, a slow camera pan around the board, and procedural click/flip/chime
-   sound synthesised in code.
+   black, and procedural click/flip/chime sound synthesised in code. The
+   recording is shot cinematically: the camera opens straight overhead and
+   spirals down and around the table, settling into a clear side view exactly
+   as the game ends, and large capture cascades set off a light flash, a subtle
+   screen flash, a puff of smoke and a small camera shake.
 
 `othello_game.mp4` is a full recorded game on that set (Black 40 – White 24).
 
@@ -94,9 +98,15 @@ look evolved across three themes as the design was refined:
   even lighting lifts a 2.5%-albedo material to grey and kills the contrast, so
   the scene keeps a light backdrop but a controlled key.
 - LODs are `"none"` (Godot 4 auto-generates mesh LODs on import).
-- The video is driven by a manual fixed-timestep clock, so the camera pan and
+- The video is driven by a manual fixed-timestep clock, so the camera move and
   every animation phase read from a dt-summed `_elapsed` — the recording is
-  bit-stable and FPS-locked no matter how slowly software-Vulkan paints.
+  bit-stable and FPS-locked no matter how slowly software-Vulkan paints. The
+  spiral lands on time because the game's exact duration is summed up front
+  (`_compute_play_dur`) and the descent is keyed to it. The drama FX (flash,
+  smoke, shake) are animated by the same manual `dt` — a real particle system
+  would advance on wall-clock render time and desync/burn through in one slow
+  frame. A straight-down camera also can't use `look_at` (up ∥ view is
+  degenerate), so the basis is built by hand from the spiral azimuth.
 - Sound is procedural PCM (`audio.gd`, no assets). Headless has no audio driver,
   so the game logs each sound event + saves the streams, and `mux_audio.py`
   builds the soundtrack and muxes it in — the event log is the single source of
