@@ -62,8 +62,21 @@ def generate(params: dict, rng, theme: dict):
             bmesh.ops.bevel(bm, geom=rim, offset=bevel, segments=2, profile=0.7,
                             affect="EDGES")
 
-    for f in bm.faces:
-        f.material_index = 0
+    # Two-tone disc (a real Reversi/Othello counter is one colour on each face,
+    # so the rim reads half-and-half from the side and a flip is a true
+    # turn-over). When the request supplies two materials, bisect the disc at
+    # its equator (z=0, before base_center_origin re-zeros it) and give the top
+    # half slot 0, the bottom half slot 1.
+    if len(params.get("materials") or []) >= 2:
+        bmesh.ops.bisect_plane(bm, geom=bm.verts[:] + bm.edges[:] + bm.faces[:],
+                               dist=1e-6, plane_co=(0.0, 0.0, 0.0),
+                               plane_no=(0.0, 0.0, 1.0),
+                               clear_inner=False, clear_outer=False)
+        for f in bm.faces:
+            f.material_index = 0 if f.calc_center_median().z >= 0.0 else 1
+    else:
+        for f in bm.faces:
+            f.material_index = 0
 
     common.base_center_origin(bm)
     common.finishing_pass(bm)

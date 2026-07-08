@@ -12,9 +12,10 @@ const Rules := preload("res://rules.gd")
 const Bot := preload("res://bot.gd")
 
 # Asset .glb (delivered next to the project, or overridden on the cmdline).
+# One two-tone disc (black on one face, white on the other), like a real set:
+# a flip is a genuine 180° turn-over, and the rim reads half black / half white.
 var _board_glb := "res://assets/board.glb"
-var _obsidian_glb := "res://assets/obsidian.glb"
-var _pearl_glb := "res://assets/pearl.glb"
+var _disc_glb := "res://assets/disc.glb"
 
 # --- timeline knobs (seconds) — the feel rubric lives here ---
 const THINK_T := 0.05      # brief beat before a move
@@ -29,7 +30,8 @@ var _record_dir := ""
 var _frame := 0
 
 var _board_root: Node3D
-var _proto := {}           # side -> template disc Node3D (hidden)
+var _disc_proto: Node3D    # the single hidden two-tone disc template
+var _disc_rot := {}        # cell(int) -> current settled rotation.x (which face is up)
 var _cx := 0.0
 var _cy := 0.0
 var _cell := 0.05
@@ -53,8 +55,7 @@ func _ready() -> void:
 		if a.begins_with("--record="): _record_dir = a.substr(9)
 		elif a.begins_with("--fps="): _fps = float(a.substr(6))
 		elif a.begins_with("--board="): _board_glb = a.substr(8)
-		elif a.begins_with("--obsidian="): _obsidian_glb = a.substr(11)
-		elif a.begins_with("--pearl="): _pearl_glb = a.substr(8)
+		elif a.begins_with("--disc="): _disc_glb = a.substr(7)
 
 	_build_stage()
 	_load_assets()
@@ -111,12 +112,10 @@ func _load_assets() -> void:
 	var play := bw - 2.0 * _border
 	_cell = play / 8.0
 	_surf_z = ab.position.y + ab.size.y - 0.004        # wood surface, just under the grid tops
-	for side in [Rules.DARK, Rules.LIGHT]:
-		var g := _load_glb(_obsidian_glb if side == Rules.DARK else _pearl_glb)
-		g.visible = false
-		add_child(g)
-		_proto[side] = g
-	_disc_h = _aabb(_proto[Rules.DARK]).size.y     # for a center-pivot flip
+	_disc_proto = _load_glb(_disc_glb)
+	_disc_proto.visible = false
+	add_child(_disc_proto)
+	_disc_h = _aabb(_disc_proto).size.y            # for a center-pivot flip
 
 func _build_trays() -> void:
 	# Two side trays of stacked reserve discs, like the real set (the rim edges
@@ -135,8 +134,7 @@ func _build_trays() -> void:
 		base.position = Vector3(tx, 0.006, _cy)
 		add_child(base)
 		for i in 14:
-			var side: int = Rules.DARK if (i % 2 == 0) else Rules.LIGHT
-			var d: Node3D = _proto[side].duplicate()
+			var d: Node3D = _disc_proto.duplicate()
 			d.visible = true
 			add_child(d)
 			d.position = Vector3(tx, 0.012 + _disc_h * i, _cy)
@@ -150,10 +148,15 @@ func _cell_pos(cell: int) -> Vector3:
 	var z := _cy - play / 2.0 + (r + 0.5) * _cell
 	return Vector3(x, _surf_z, z)
 
-func _disc_visual(side: int) -> Node3D:
-	# a colored disc whose CENTER sits at the holder origin (so the holder can
-	# pivot the flip about the disc's middle, not its base)
-	var vis: Node3D = _proto[side].duplicate()
+# rotation.x that puts a given face up. The generator gives the disc's TOP half
+# (z>0) material slot 0 = black, bottom = white, so black is up at rot 0.
+func _rot_for(side: int) -> float:
+	return 0.0 if side == Rules.DARK else PI
+
+func _disc_visual() -> Node3D:
+	# the two-tone disc, offset so its CENTER sits at the holder origin (so the
+	# holder pivots the flip about the disc's middle, not its base)
+	var vis: Node3D = _disc_proto.duplicate()
 	vis.visible = true
 	vis.position.y = -_disc_h / 2.0
 	return vis
@@ -163,17 +166,13 @@ func _new_disc(side: int, cell: int) -> Node3D:
 	add_child(holder)
 	var p := _cell_pos(cell)
 	holder.position = Vector3(p.x, p.y + _disc_h / 2.0, p.z)   # holder at disc center
-	holder.add_child(_disc_visual(side))
+	var rot := _rot_for(side)
+	holder.rotation.x = rot
+	holder.add_child(_disc_visual())
 	_discs[cell] = holder
 	_disc_side[cell] = side
+	_disc_rot[cell] = rot
 	return holder
-
-func _set_disc_side(cell: int, side: int) -> void:
-	# swap the colored mesh under an existing holder (used mid-flip)
-	var holder: Node3D = _discs[cell]
-	for c in holder.get_children(): c.queue_free()
-	holder.add_child(_disc_visual(side))
-	_disc_side[cell] = side
 
 # --------------------------------------------------------------- game -----
 func _precompute_game() -> void:
@@ -238,16 +237,14 @@ func _step(dt: float) -> void:
 					continue
 				var k2: float = clampf(local / FLIP_DUR, 0.0, 1.0)
 				if k2 < 1.0: all_done = false
-				# 0..PI rotation about the board-plane X axis
-				var ang: float = k2 * PI
-				var holder: Node3D = _discs[f.cell]
-				holder.rotation.x = ang
-				# swap to the mover's color as it passes edge-on (90°)
-				if k2 >= 0.5 and _disc_side[f.cell] != mv.side:
-					_set_disc_side(f.cell, mv.side)
+				# turn the physical two-tone disc over by PI from where it sat:
+				# the other face (the mover's colour) comes up on its own.
+				_discs[f.cell].rotation.x = _disc_rot[f.cell] + k2 * PI
 			if all_done:
 				for f in flips:
-					_discs[f.cell].rotation.x = 0.0     # land flat, face-up
+					_disc_rot[f.cell] += PI
+					_discs[f.cell].rotation.x = _disc_rot[f.cell]
+					_disc_side[f.cell] = mv.side
 				_phase = "pause"; _pt = 0.0
 		"pause":
 			if _pt >= PAUSE_T:
