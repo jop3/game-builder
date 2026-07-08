@@ -15,6 +15,8 @@ EXPECTED_RECIPES = {
     "props/crate": "prop_small",
     "props/barrel": "prop_small",
     "props/lantern": "prop_small",
+    "props/game_board": "prop_small",
+    "props/game_disc": "prop_small",
     "env/rock": "environment_piece",
     "env/tree_lowpoly": "environment_piece",
     "env/house": "environment_piece",
