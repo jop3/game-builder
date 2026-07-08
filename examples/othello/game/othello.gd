@@ -627,35 +627,39 @@ func _build_sea() -> void:
 	sea.position = Vector3(0.0, SEA_Y, 0.0)
 	add_child(sea)
 
-# liten klippö med marmortopp som brädet och kolonnerna står på
+# liten klippö med marmortopp som brädet och kolonnerna står på. Klippans topp
+# ligger UNDER marmorplattans undersida (ingen koplanär yta → inget z-fight), och
+# marmortoppen ligger en aning under brädets underkant.
 func _build_island() -> void:
-	# våt mörk klippa
+	# våt mörk klippa: toppen vid y=-0.05, gömd inuti marmorplattan
 	var rock := MeshInstance3D.new()
 	var cyl := CylinderMesh.new()
 	cyl.top_radius = ISLAND_R
-	cyl.bottom_radius = ISLAND_R * 1.15
-	cyl.height = -SEA_Y + 0.2
+	cyl.bottom_radius = ISLAND_R * 1.2
+	var rock_top := -0.05
+	cyl.height = rock_top - (SEA_Y - 0.2)
 	cyl.radial_segments = 40
 	rock.mesh = cyl
 	var rm := StandardMaterial3D.new()
-	rm.albedo_color = Color(0.10, 0.11, 0.12)
-	rm.roughness = 0.85
+	rm.albedo_color = Color(0.09, 0.10, 0.11)
+	rm.roughness = 0.9
 	rock.material_override = rm
-	rock.position = Vector3(0.0, (SEA_Y - 0.2) / 2.0, 0.0)   # topp vid y≈0
+	rock.position = Vector3(0.0, (SEA_Y - 0.2 + rock_top) / 2.0, 0.0)
 	add_child(rock)
-	# marmorplatta i toppen
+	# marmorplatta i toppen: spänner [-0.10, -0.006] (omsluter klipptoppen vid
+	# -0.05, topp strax under brädets underkant vid y≈0)
 	var top := MeshInstance3D.new()
 	var tc := CylinderMesh.new()
-	tc.top_radius = ISLAND_R * 1.02
-	tc.bottom_radius = ISLAND_R
-	tc.height = 0.06
+	tc.top_radius = ISLAND_R * 1.06
+	tc.bottom_radius = ISLAND_R * 0.98
+	tc.height = 0.094
 	tc.radial_segments = 48
 	top.mesh = tc
 	var tm := StandardMaterial3D.new()
 	tm.albedo_color = Color(0.80, 0.79, 0.74)
-	tm.roughness = 0.35
+	tm.roughness = 0.4
 	top.material_override = tm
-	top.position = Vector3(0.0, -0.03, 0.0)
+	top.position = Vector3(0.0, -0.053, 0.0)
 	add_child(top)
 
 # ring av marmorkolonner runt brädet — glesad vid framsidan (az=0) så

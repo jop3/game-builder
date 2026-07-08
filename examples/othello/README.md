@@ -40,10 +40,24 @@ game/
                     animates the flip cascade, flies a cinematic spiral camera,
                     fires drama FX on big cascades, records deterministically
   mux_audio.py    overlays the procedural soundtrack onto a recorded mp4 (headless has no audio)
+  sea.gdshader    deterministic stormy-sea shader (waves + foam, driven by an _elapsed uniform)
+  sky.gdshader    deterministic stormy-sky shader (drifting fbm clouds + lightning flash uniform)
   assets/board.glb  the validated reversi_classic green-felt board (black frame)
   assets/disc.glb   the validated TWO-TONE disc (black one face, white the other)
-  othello_game.mp4  a full recorded game on the realistic Reversi set, with sound (Black 40 – White 24)
+  assets/column.glb the validated greek_arena fluted marble column (pipeline-generated)
+  othello_game.mp4  a full recorded game on the Greek island arena, with sound (Black 40 – White 24)
 ```
+
+### The arena (Greek island in a stormy sea)
+
+The board is staged on a small marble island ringed by a colonnade of Greek
+columns, under an overcast sky over a stormy sea, with lightning + thunder. The
+**columns are a pipeline asset** (`env/column` generator + `greek_arena` theme's
+`marble_white` material, requested in `arena_batch.json`, validated through V1 +
+V2). The **sea, sky and island** are procedural Godot (two `.gdshader` files +
+scene geometry) — animated by an `_elapsed` uniform, never `TIME`, so the render
+stays deterministic. Lightning drives both a scene flash and the sky shader's
+`flash` uniform; thunder follows ~0.5 s later through the same audio-event log.
 
 Run the tests: `godot --headless --path game --script res://test_rules.gd`
 Play it:       `godot --path game res://othello.tscn`   (with live procedural sound)
