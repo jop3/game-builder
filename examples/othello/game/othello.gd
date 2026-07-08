@@ -36,6 +36,7 @@ var _cell := 0.05
 var _surf_z := 0.03
 var _border := 0.0265
 var _disc_h := 0.007
+var _bw := 0.46          # board footprint (measured)
 
 var _discs := {}           # cell(int) -> Node3D holder (child = colored disc)
 var _disc_side := {}       # cell(int) -> currently displayed side
@@ -57,6 +58,7 @@ func _ready() -> void:
 
 	_build_stage()
 	_load_assets()
+	_build_trays()
 	_precompute_game()
 	_place_start()
 	# drive everything from a manual clock so recordings are deterministic
@@ -103,6 +105,7 @@ func _load_assets() -> void:
 	add_child(_board_root)
 	var ab := _aabb(_board_root)
 	var bw: float = min(ab.size.x, ab.size.z)          # board footprint (X/Z plane, Y up in Godot)
+	_bw = bw
 	_cx = ab.position.x + ab.size.x * 0.5
 	_cy = ab.position.z + ab.size.z * 0.5
 	var play := bw - 2.0 * _border
@@ -114,6 +117,30 @@ func _load_assets() -> void:
 		add_child(g)
 		_proto[side] = g
 	_disc_h = _aabb(_proto[Rules.DARK]).size.y     # for a center-pivot flip
+
+func _build_trays() -> void:
+	# Two side trays of stacked reserve discs, like the real set (the rim edges
+	# read as striped black/white columns). Purely decorative, not game state.
+	var half := _bw / 2.0
+	for sign in [-1.0, 1.0]:
+		var tx: float = _cx + sign * (half + 0.052)
+		var base := MeshInstance3D.new()
+		var bm := BoxMesh.new()
+		bm.size = Vector3(0.062, 0.012, _bw * 0.86)
+		base.mesh = bm
+		var mat := StandardMaterial3D.new()
+		mat.albedo_color = Color(0.02, 0.02, 0.02)
+		mat.roughness = 0.3
+		base.material_override = mat
+		base.position = Vector3(tx, 0.006, _cy)
+		add_child(base)
+		for i in 14:
+			var side: int = Rules.DARK if (i % 2 == 0) else Rules.LIGHT
+			var d: Node3D = _proto[side].duplicate()
+			d.visible = true
+			add_child(d)
+			d.position = Vector3(tx, 0.012 + _disc_h * i, _cy)
+			d.rotation.y = deg_to_rad(4.0 * (1 if i % 2 else -1))
 
 func _cell_pos(cell: int) -> Vector3:
 	var r: int = cell / 8
@@ -255,46 +282,58 @@ func _final_board() -> PackedInt32Array:
 func _build_stage() -> void:
 	var env := WorldEnvironment.new()
 	var e := Environment.new()
+	# Realistic product-shot look (matching a real Reversi set photo): bright,
+	# fairly even, neutral-cool light on a light table so the green felt reads
+	# green and the glossy black/white pieces show crisp specular highlights.
 	e.background_mode = Environment.BG_COLOR
-	e.background_color = Color(0.04, 0.03, 0.03)
+	e.background_color = Color(0.62, 0.63, 0.65)
 	e.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	e.ambient_light_color = Color(0.28, 0.24, 0.34)
-	e.ambient_light_energy = 0.05        # near-dark ambient so the obsidian reads black
+	e.ambient_light_color = Color(0.62, 0.64, 0.68)
+	e.ambient_light_energy = 0.6
 	e.tonemap_mode = Environment.TONE_MAPPER_AGX
+	e.tonemap_white = 6.0
 	e.glow_enabled = true
-	e.glow_intensity = 0.12
+	e.glow_intensity = 0.18
 	e.glow_bloom = 0.05
 	env.environment = e
 	add_child(env)
 
-	# warm candlelight key — restrained so it pools on the board, not blows it out
+	# Bright soft key high above (the overhead lamp) — the small specular it
+	# casts is what makes the glossy pieces read as polished.
 	var key := OmniLight3D.new()
-	key.light_color = Color(1.0, 0.66, 0.34)
-	key.light_energy = 2.4
-	key.omni_range = 2.2
-	key.omni_attenuation = 1.4
-	key.position = Vector3(-0.26, 0.40, -0.18)
+	key.light_color = Color(1.0, 0.98, 0.94)
+	key.light_energy = 8.0
+	key.omni_range = 4.0
+	key.omni_attenuation = 1.0
+	key.position = Vector3(-0.2, 0.75, -0.05)
 	key.shadow_enabled = true
 	add_child(key)
+	# a second cooler highlight from the front-right for a twin specular dot
+	var spec := OmniLight3D.new()
+	spec.light_color = Color(0.95, 0.97, 1.0)
+	spec.light_energy = 3.0
+	spec.omni_range = 3.0
+	spec.position = Vector3(0.45, 0.5, 0.5)
+	add_child(spec)
 	var fill := OmniLight3D.new()
-	fill.light_color = Color(0.5, 0.62, 0.95)
-	fill.light_energy = 0.5
-	fill.omni_range = 2.6
-	fill.position = Vector3(0.55, 0.42, 0.45)
+	fill.light_color = Color(0.85, 0.88, 0.95)
+	fill.light_energy = 1.5
+	fill.omni_range = 4.0
+	fill.position = Vector3(0.1, 0.35, 0.7)
 	add_child(fill)
 
 	var table := MeshInstance3D.new()
-	var pm := PlaneMesh.new(); pm.size = Vector2(3, 3)
+	var pm := PlaneMesh.new(); pm.size = Vector2(4, 4)
 	table.mesh = pm
 	var tm := StandardMaterial3D.new()
-	tm.albedo_color = Color(0.05, 0.03, 0.02); tm.roughness = 0.8
+	tm.albedo_color = Color(0.72, 0.72, 0.74); tm.roughness = 0.55   # light tabletop
 	table.material_override = tm
-	table.position = Vector3(0, 0.0, 0)
+	table.position = Vector3(0, -0.001, 0)
 	add_child(table)
 
 	var cam := Camera3D.new()
-	cam.fov = 58
-	# look_at() needs the node in-tree; look_at_from_position() does not, so we
-	# can aim before adding it (avoids the "Node not inside tree" error).
-	cam.look_at_from_position(Vector3(0.0, 0.46, 0.42), Vector3(0.0, 0.02, 0.0), Vector3.UP)
+	cam.fov = 60
+	# pulled back + up a touch so the board AND the two side trays fit frame.
+	# look_at() needs the node in-tree; look_at_from_position() does not.
+	cam.look_at_from_position(Vector3(0.0, 0.54, 0.52), Vector3(0.0, 0.015, 0.0), Vector3.UP)
 	add_child(cam)
