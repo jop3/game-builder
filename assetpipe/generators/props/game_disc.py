@@ -22,6 +22,11 @@ PARAM_SCHEMA = {
         # Which theme material recipe(s) to bake (per request); empty -> the
         # stage falls back to the theme's first recipe.
         "materials": {"type": "array", "items": {"type": "string"}},
+        # A polished game piece is intentionally near-uniform in albedo -- set
+        # true so V1's S16 skips the not-flat variance test (spec 13.3), the
+        # same escape lowpoly_stylized uses. The luminance-range bound still
+        # applies, so a truly black/blown bake is still caught.
+        "flat_color": {"type": "boolean", "default": False},
     },
     "additionalProperties": False,
 }

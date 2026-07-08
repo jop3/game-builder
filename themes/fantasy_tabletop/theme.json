@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "theme_id": "fantasy_tabletop",
+  "display_name": "Fantasy Tabletop",
+  "palette": {
+    "primary":   ["#3A2415", "#5A3A20"],
+    "secondary": ["#0B0B0F", "#E8E2D6"],
+    "accent":    ["#6E6E74", "#B8912E"],
+    "emissive":  ["#FFD24A"],
+    "forbidden": ["#00C2A8"]
+  },
+  "materials": [
+    "tabletop_wood", "tabletop_iron", "obsidian_black", "pearl_white"
+  ],
+  "silhouette_language": "Turned tabletop game pieces and boards: smooth round discs and a flat gridded board with a raised rim; clean rounded forms, no rough organic irregularity or greebles.",
+  "wear_range": [0.05, 0.3],
+  "detail_density_range": [0.1, 0.4],
+  "vision_style_brief": "A warm fantasy tabletop set: an aged-honey-oak board with a dark forged-iron grid and rim; the playing pieces are polished near-black obsidian and warm pearl-white stone, reading clearly as dark vs light under candlelight. NOT: rough weathered stone pieces, sci-fi materials, saturated primary colors.",
+  "anti_style": [
+    "rough weathered or cobbled stone game pieces",
+    "sci-fi or brushed-metal sheen on the discs",
+    "saturated primary colors covering large areas"
+  ],
+  "skybox_defaults": { "recipe": "candlelit_hall", "sun_elevation_deg": 20 }
+}

@@ -1,0 +1,9 @@
+config_version=5
+
+[application]
+config/name="Moonstone & Obsidian"
+run/main_scene="res://othello.tscn"
+config/features=PackedStringArray("4.3", "Forward Plus")
+
+[rendering]
+renderer/rendering_method="forward_plus"
