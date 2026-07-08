@@ -221,6 +221,38 @@ Bakes of smooth ramps (roughness gradients, AO) band visibly when quantized stra
 8-bit **with seeded blue-noise/triangular dither** (add `rng.uniform(-0.5, 0.5)` per pixel
 before rounding). Deterministic because the RNG is seeded.
 
+## Near-black / near-white albedo is staging-coupled
+
+A "make it read pure black" material is a lighting contract, not just an albedo value.
+An albedo at the S16 luminance floor (~2.5%) only *reads* black under a **moderate,
+controlled** key. Flat over-bright even lighting (a white studio dome, ambient energy
+turned up "so we can see it") lifts a 2.5%-albedo surface to muddy grey and destroys the
+black-vs-white contrast — the material is fine; the scene killed it. Lessons that held up
+building the Reversi disc set:
+
+- Bake the black just above the floor (`To Min≈0.020`, `To Max≈0.026`) and the white just
+  below the blown ceiling (`0.94–0.985`), each with a **low roughness** so the contrast
+  comes from a *sharp specular dot*, not from lifting the base value. A glossy near-black
+  with one bright glint reads far blacker than a matte dark-grey.
+- Push readability into the *scene*, not the albedo: keep a light backdrop but a single
+  controlled directional key + low ambient (energy ~0.1). If a reviewer says "the black
+  looks grey," suspect the lights before you raise the albedo.
+- For a genuinely flat piece, declare `flat_color` so S16 enforces only the luminance
+  floor (not the std-dev "must have variance" rule) — otherwise you're forced to add
+  noise that fights the clean look you want.
+
+## Layered value noise: blend additively, not multiplicatively
+
+To give a matte surface visible texture (felt weave, fabric nap) mix **two noise scales**
+— a tight weave over a broad mottle. Blend them with a `ShaderNodeMix` in **FLOAT** mode
+(average), *not* a MULTIPLY: multiplying two <1 factors concentrates toward dark and the
+"texture" collapses into blotches while the mean drops. Average keeps both scales
+contributing spread around the mean. Then a **wide** `MapRange` value band (e.g.
+`0.45 → 1.5`) plus a bump keyed to the *fine* scale makes the weave actually visible
+rather than reading as a flat coloured card. Verify with a bake-smoke (`mean`, `std`): a
+deep felt landed at `mean≈0.095 std≈0.006` — low mean (deep colour) but non-zero std
+(real texture).
+
 ## Pitfall checklist
 
 - **Black bake** → target image node not active, object not selected+active, or baking

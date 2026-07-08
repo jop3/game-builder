@@ -10,6 +10,7 @@ extends Node3D
 
 const Rules := preload("res://rules.gd")
 const Bot := preload("res://bot.gd")
+const Audio := preload("res://audio.gd")
 
 # Asset .glb (delivered next to the project, or overridden on the cmdline).
 # One two-tone disc (black on one face, white on the other), like a real set:
@@ -49,6 +50,25 @@ var _mi := 0               # move index
 var _phase := "think"      # think | place | flip | pause | done
 var _pt := 0.0             # time in phase
 var _done_t := 0.0
+var _flip_fired := {}      # i -> true, vilka vändningar i draget som redan ljudit
+var _win_fired := false
+
+# --- kamera-panorering ---
+var _cam: Camera3D
+var _elapsed := 0.0        # total speltid (deterministisk, dt-summerad)
+const CAM_R := 0.52        # kamerans radie i XZ-planet runt brädets mitt
+const CAM_Y := 0.54        # kamerahöjd
+const CAM_SWEEP_DEG := 30.0 # ± azimut-amplitud för den långsamma pannan
+const CAM_PERIOD := 26.0   # sekunder för en fram-och-tillbaka-svep
+
+# --- ljud ---
+var _sfx_place: AudioStreamWAV
+var _sfx_flip := []         # några tonhöjdsvarianter
+var _sfx_win: AudioStreamWAV
+var _p_place: AudioStreamPlayer
+var _p_flip: AudioStreamPlayer
+var _p_win: AudioStreamPlayer
+var _events := []           # [{f, kind, idx}] för muxern vid inspelning
 
 func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
@@ -58,12 +78,43 @@ func _ready() -> void:
 		elif a.begins_with("--disc="): _disc_glb = a.substr(7)
 
 	_build_stage()
+	_build_audio()
 	_load_assets()
 	_build_trays()
 	_precompute_game()
 	_place_start()
 	# drive everything from a manual clock so recordings are deterministic
 	_run()
+
+# ----------------------------------------------------------------- ljud ----
+func _build_audio() -> void:
+	_sfx_place = Audio.make_place()
+	for k in 4:
+		_sfx_flip.append(Audio.make_flip(k))
+	_sfx_win = Audio.make_win()
+	_p_place = AudioStreamPlayer.new(); add_child(_p_place)
+	_p_flip = AudioStreamPlayer.new(); _p_flip.max_polyphony = 8; add_child(_p_flip)
+	_p_win = AudioStreamPlayer.new(); add_child(_p_win)
+	# Vid inspelning: spara effekterna som .wav så muxern kan lägga dem på spåret
+	# (headless-drivern spelar inget). Interaktivt: spela direkt i _sfx().
+	if not _record_dir.is_empty():
+		_sfx_place.save_to_wav("%s/sfx_place.wav" % _record_dir)
+		_sfx_win.save_to_wav("%s/sfx_win.wav" % _record_dir)
+		for k in _sfx_flip.size():
+			_sfx_flip[k].save_to_wav("%s/sfx_flip_%d.wav" % [_record_dir, k])
+
+# emittera en ljudhändelse: logga (för muxern) + spela direkt om vi inte spelar in
+func _sfx(kind: String, idx: int = 0) -> void:
+	_events.append({"f": _frame, "kind": kind, "idx": idx})
+	if not _record_dir.is_empty():
+		return
+	match kind:
+		"place":
+			_p_place.stream = _sfx_place; _p_place.play()
+		"flip":
+			_p_flip.stream = _sfx_flip[idx % _sfx_flip.size()]; _p_flip.play()
+		"win":
+			_p_win.stream = _sfx_win; _p_win.play()
 
 # ---------------------------------------------------------------- assets ---
 func _load_glb(path: String) -> Node3D:
@@ -213,6 +264,9 @@ func _step(dt: float) -> void:
 		return
 	if _mi >= _moves.size():
 		_phase = "done"
+		if not _win_fired:
+			_win_fired = true
+			_sfx("win")
 		return
 	_pt += dt
 	var mv: Dictionary = _moves[_mi]
@@ -222,6 +276,7 @@ func _step(dt: float) -> void:
 				# drop the new disc in
 				var h := _new_disc(mv.side, mv.cell)
 				h.scale = Vector3(0.2, 0.2, 0.2)
+				_sfx("place")
 				_phase = "place"; _pt = 0.0
 		"place":
 			var k: float = clampf(_pt / PLACE_T, 0.0, 1.0)
@@ -231,6 +286,7 @@ func _step(dt: float) -> void:
 			_discs[mv.cell].position.y = _surf_z + _disc_h / 2.0 + (1.0 - e) * 0.03   # settle down
 			if k >= 1.0:
 				_phase = "flip" if not mv.flips.is_empty() else "pause"
+				_flip_fired = {}
 				_pt = 0.0
 		"flip":
 			var flips: Array = mv.flips
@@ -242,6 +298,9 @@ func _step(dt: float) -> void:
 				if local < 0.0:
 					all_done = false
 					continue
+				if not _flip_fired.has(i):
+					_flip_fired[i] = true
+					_sfx("flip", i)
 				var k2: float = clampf(local / FLIP_DUR, 0.0, 1.0)
 				if k2 < 1.0: all_done = false
 				# turn the physical two-tone disc over by PI from where it sat:
@@ -265,6 +324,8 @@ func _run() -> void:
 		DirAccess.make_dir_recursive_absolute(_record_dir)
 	while true:
 		_step(dt)
+		_elapsed += dt
+		_update_camera()
 		await RenderingServer.frame_post_draw
 		if not _record_dir.is_empty():
 			var img := get_viewport().get_texture().get_image()
@@ -272,10 +333,23 @@ func _run() -> void:
 		_frame += 1
 		if _phase == "done" and _done_t >= END_HOLD:
 			break
+	if not _record_dir.is_empty():
+		_write_events()
 	var sc := Rules.score(_final_board())
 	print("GAME_OVER dark=%d light=%d winner=%s frames=%d" % [
 		sc.dark, sc.light, ("dark" if sc.dark > sc.light else "light"), _frame])
 	get_tree().quit()
+
+# en rad per ljudhändelse: "frame kind idx" — läses av mux_audio.py
+func _write_events() -> void:
+	var lines := PackedStringArray()
+	lines.append("fps %f" % _fps)
+	for e in _events:
+		lines.append("%d %s %d" % [e.f, e.kind, e.idx])
+	var f := FileAccess.open("%s/audio_events.txt" % _record_dir, FileAccess.WRITE)
+	if f:
+		f.store_string("\n".join(lines))
+		f.close()
 
 func _final_board() -> PackedInt32Array:
 	var b := PackedInt32Array(); b.resize(64); b.fill(0)
@@ -335,9 +409,18 @@ func _build_stage() -> void:
 	table.position = Vector3(0, -0.001, 0)
 	add_child(table)
 
-	var cam := Camera3D.new()
-	cam.fov = 60
+	_cam = Camera3D.new()
+	_cam.fov = 60
 	# pulled back + up a touch so the board AND the two side trays fit frame.
 	# look_at() needs the node in-tree; look_at_from_position() does not.
-	cam.look_at_from_position(Vector3(0.0, 0.54, 0.52), Vector3(0.0, 0.015, 0.0), Vector3.UP)
-	add_child(cam)
+	add_child(_cam)
+	_update_camera()   # sätt startpose (azimut 0 = rakt framifrån)
+
+# Långsam panorering: kameran svänger mjukt i en båge (±CAM_SWEEP_DEG) runt
+# brädets mitt medan partiet spelas, med en knappt märkbar höjdvaggning. Allt
+# drivs av _elapsed (dt-summerad) så inspelningen förblir deterministisk.
+func _update_camera() -> void:
+	var theta := deg_to_rad(CAM_SWEEP_DEG) * sin(TAU * _elapsed / CAM_PERIOD)
+	var y := CAM_Y + 0.03 * sin(TAU * _elapsed / 41.0)
+	var pos := Vector3(CAM_R * sin(theta), y, CAM_R * cos(theta))
+	_cam.look_at_from_position(pos, Vector3(0.0, 0.015, 0.0), Vector3.UP)

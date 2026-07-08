@@ -172,6 +172,47 @@ streams.
   when the layer loops) wrapping a `Sprite2D`. Same pattern: text resource generation +
   headless load-and-assert.
 
+## Recording deterministic gameplay video (+ procedural audio)
+
+To show a generated asset *in motion* (a played game, a turntable of a rigged prop) as a
+shareable video, drive the scene from a **manual fixed-timestep clock**, not `_process`:
+
+```gdscript
+var dt := 1.0 / _fps
+while true:
+    _step(dt)                       # advance game state by exactly dt (no OS.delta)
+    _elapsed += dt                  # accumulate your own time — for camera moves, timers
+    _update_camera()
+    await RenderingServer.frame_post_draw
+    if not _record_dir.is_empty():
+        get_viewport().get_texture().get_image().save_png("%s/frame_%04d.png" % [_record_dir, _frame])
+    _frame += 1
+```
+
+Because every time-dependent value (animation phase, camera azimuth, event timing) reads
+from the dt-summed `_elapsed` and never from wall-clock delta, the render is **bit-stable
+and FPS-locked** regardless of how slowly software-Vulkan (lavapipe) actually paints each
+frame. Stitch with `ffmpeg -framerate <fps> -i frame_%04d.png ...`. A slow camera pan is
+just `azimuth = A * sin(TAU * _elapsed / period)` around the subject's centre — keep the
+amplitude modest (±30°) and the orbit radius constant so the subject stays framed at both
+extremes (verify the extreme frames, not just the middle).
+
+**Audio: headless has no audio driver** (`AudioServer` falls back to the dummy driver — no
+sound reaches the PNG frames). So you cannot "record" audio inline. Instead make it
+deterministic and mux it in post:
+
+1. Synthesize SFX procedurally as `AudioStreamWAV` (PCM in code, no assets) — same streams
+   you `play()` in interactive mode, so game and video sound identical.
+2. During recording, **log each sound event** as `frame kind idx` and `save_to_wav()` the
+   streams once into the record dir.
+3. A tiny post script builds a silent master of length `nframes/fps`, mixes each clip in at
+   `round(frame/fps * rate)`, writes `soundtrack.wav`, and `ffmpeg -i video -i soundtrack
+   -c:v copy -c:a aac -shortest out.mp4`.
+
+The event log is the single source of truth for both the on-screen action and the
+soundtrack, so they can never drift. (Worked example: `examples/othello/game/audio.gd` +
+`mux_audio.py`.)
+
 ## Engine-neutrality guardrails (why the adapter stays thin)
 
 - **Godot does not support `KHR_draco_mesh_compression`** — a Draco-compressed glb imports

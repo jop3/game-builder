@@ -35,16 +35,19 @@ game/
   rules.gd        pure rules (one shared 8-direction table, legal moves, flip, terminal, score)
   bot.gd          deterministic corner-aware bot (positional weights + mobility)
   test_rules.gd   14 headless checks incl. verify-the-verifier fixtures
+  audio.gd        procedural PCM SFX (place / flip / win) — no audio assets
   othello.gd/.tscn  loads the .glb at runtime, plays a full bot-vs-bot game,
-                    animates the flip cascade, records deterministically
+                    animates the flip cascade, slow-pans the camera, records deterministically
+  mux_audio.py    overlays the procedural soundtrack onto a recorded mp4 (headless has no audio)
   assets/board.glb  the validated reversi_classic green-felt board (black frame)
   assets/disc.glb   the validated TWO-TONE disc (black one face, white the other)
-  othello_game.mp4  a full recorded game on the realistic Reversi set (Black 40 – White 24)
+  othello_game.mp4  a full recorded game on the realistic Reversi set, with sound (Black 40 – White 24)
 ```
 
 Run the tests: `godot --headless --path game --script res://test_rules.gd`
-Play it:       `godot --path game res://othello.tscn`
+Play it:       `godot --path game res://othello.tscn`   (with live procedural sound)
 Record a game: `godot --path game res://othello.tscn -- --record=DIR --fps=24`
+Add the sound: `python3 game/mux_audio.py --dir DIR --video silent.mp4 --out othello_game.mp4`
 
 ## How the graphics were produced (reproducible)
 
@@ -76,7 +79,9 @@ look evolved across three themes as the design was refined:
    **two-tone disc** (glossy black on one face, white on the other, split at the
    rim) so a capture is a genuine 180° **turn-over**, not a colour swap. The
    `game/` scene stages it like the real set: light tabletop, side trays of
-   stacked striped discs, restrained lighting so black reads black.
+   striped discs lying in their channels, restrained lighting so black reads
+   black, a slow camera pan around the board, and procedural click/flip/chime
+   sound synthesised in code.
 
 `othello_game.mp4` is a full recorded game on that set (Black 40 – White 24).
 
@@ -89,6 +94,13 @@ look evolved across three themes as the design was refined:
   even lighting lifts a 2.5%-albedo material to grey and kills the contrast, so
   the scene keeps a light backdrop but a controlled key.
 - LODs are `"none"` (Godot 4 auto-generates mesh LODs on import).
+- The video is driven by a manual fixed-timestep clock, so the camera pan and
+  every animation phase read from a dt-summed `_elapsed` — the recording is
+  bit-stable and FPS-locked no matter how slowly software-Vulkan paints.
+- Sound is procedural PCM (`audio.gd`, no assets). Headless has no audio driver,
+  so the game logs each sound event + saves the streams, and `mux_audio.py`
+  builds the soundtrack and muxes it in — the event log is the single source of
+  truth, so picture and sound can't drift.
 
 The full playable game (rules + bot + flip animation, spec M1/M3/M4) **is built**
 here; the remaining spec milestones (difficulty tiers, hotseat) are future work.

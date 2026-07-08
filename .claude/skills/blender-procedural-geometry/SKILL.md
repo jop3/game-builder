@@ -56,6 +56,26 @@ cleanup pass after).
 Never `random.*` module-level, never `mathutils.noise` without a seeded offset, never
 iteration over `dict`/`set` of Blender IDs where order feeds the RNG stream.
 
+### Multi-material from one mesh (split by plane)
+
+When a single object needs two materials on opposite halves — a Reversi disc that is black
+on one face and white on the other, so a "flip" is a real 180° turn-over and the *rim*
+reads half/half — don't model two caps. Build the solid once, bisect at the equator, and
+assign material slots by which side of the plane each face's centroid lands:
+
+```python
+bmesh.ops.bisect_plane(bm, geom=bm.verts[:] + bm.edges[:] + bm.faces[:],
+                       dist=1e-6, plane_co=(0, 0, 0), plane_no=(0, 0, 1),
+                       clear_inner=False, clear_outer=False)   # keep both halves, add the cut loop
+for f in bm.faces:
+    f.material_index = 0 if f.calc_center_median().z >= 0.0 else 1   # 0 = top slot, 1 = bottom
+```
+
+Bisect *before* the finishing pass — `triangulate`/`remove_doubles` after — and gate it on
+the caller actually supplying ≥2 materials (`len(params.get("materials") or []) >= 2`) so
+the single-material case stays a clean one-slot mesh. The consuming engine encodes "which
+face is up" as a rotation and animates the turn-over; the mesh itself carries no state.
+
 ## Scene conventions (enforce, don't document)
 
 - 1 BU = 1 m (`scene.unit_settings.system='METRIC'`, `scale_length=1.0`).
