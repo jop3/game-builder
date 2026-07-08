@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "theme_id": "greek_arena",
+  "display_name": "Greek Arena",
+  "palette": {
+    "primary":   ["#DAD5C8", "#C9C3B4"],
+    "secondary": ["#8A8C90", "#6E7076"],
+    "accent":    ["#B9AC94", "#9C8F76"],
+    "emissive":  ["#EAF2FF"],
+    "forbidden": ["#00FF7F"]
+  },
+  "materials": [
+    "marble_white"
+  ],
+  "silhouette_language": "Classical Greek architecture: tall fluted marble columns with a square plinth base and a Doric capital (round echinus + square abacus), clean carved stone forms.",
+  "wear_range": [0.0, 0.2],
+  "detail_density_range": [0.1, 0.4],
+  "vision_style_brief": "Weathered white Greek marble under an overcast, stormy sky: a fluted Doric column, warm cream stone with thin cool-grey veining and a polished-but-worn surface. Monumental, ancient, dramatic. NOT: shiny plastic, coloured stone, sci-fi or fantasy-glowing materials, low-contrast mud.",
+  "anti_style": [
+    "shiny plastic or ceramic look",
+    "saturated or coloured stone (must read as white/grey marble)",
+    "sci-fi, metallic or fantasy-glowing materials"
+  ],
+  "skybox_defaults": { "recipe": "stormy_overcast", "sun_elevation_deg": 18 }
+}

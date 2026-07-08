@@ -55,6 +55,25 @@ static func make_flip(seedv: int) -> AudioStreamWAV:
 		s[i] = tone * env * 0.45
 	return _wav(s)
 
+# Åska: ett lågt muller — brusband som byggs upp och klingar av långsamt, med
+# en låg sinus-svep under. Deterministiskt brus via hash (ingen global RNG).
+static func make_thunder() -> AudioStreamWAV:
+	var dur := 1.8
+	var n := int(RATE * dur)
+	var s := PackedFloat32Array(); s.resize(n)
+	var prev := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		# långsam attack + lång svans
+		var env: float = clampf(t / 0.12, 0.0, 1.0) * exp(-t * 1.9)
+		# lågpassat brus (enkel en-pols) för mullret; deterministiskt hash-brus
+		var hv: float = sin(float(i) * 12.9898) * 43758.5453
+		var white: float = (hv - floor(hv)) * 2.0 - 1.0
+		prev = prev + 0.06 * (white - prev)         # lågpass
+		var sub: float = sin(TAU * (48.0 - 18.0 * t) * t) * 0.4   # låg svep
+		s[i] = clampf((prev * 2.6 + sub) * env * 0.8, -1.0, 1.0)
+	return _wav(s)
+
 # Mjuk stigande klocka (C–E–G–C arpeggio) med klockliknande övertoner.
 static func make_win() -> AudioStreamWAV:
 	var dur := 1.5

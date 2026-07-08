@@ -83,13 +83,26 @@ var _shake_amp := 0.0
 var _puffs := []            # aktiva rökpuffar (manuellt animerade)
 var _puff_tex: Texture2D
 
+# --- arena (hav, himmel, blixt) ---
+var _sea_mat: ShaderMaterial
+var _sky_mat: ShaderMaterial
+var _bolt: DirectionalLight3D    # blixtljus (spikar vid nedslag)
+var _bolt_t := 999.0
+var _bolt_dur := 0.45
+var _bolt_peak := 0.0
+var _bolt_times := []            # schemalagda blixttider (sekunder)
+var _bolt_i := 0
+var _col_glb := "res://assets/column.glb"
+
 # --- ljud ---
 var _sfx_place: AudioStreamWAV
 var _sfx_flip := []         # några tonhöjdsvarianter
 var _sfx_win: AudioStreamWAV
+var _sfx_thunder: AudioStreamWAV
 var _p_place: AudioStreamPlayer
 var _p_flip: AudioStreamPlayer
 var _p_win: AudioStreamPlayer
+var _p_thunder: AudioStreamPlayer
 var _events := []           # [{f, kind, idx}] för muxern vid inspelning
 
 func _ready() -> void:
@@ -106,6 +119,7 @@ func _ready() -> void:
 	_build_trays()
 	_precompute_game()
 	_play_dur = _compute_play_dur()
+	_schedule_bolts()
 	_place_start()
 	# drive everything from a manual clock so recordings are deterministic
 	_run()
@@ -128,20 +142,24 @@ func _build_audio() -> void:
 	for k in 4:
 		_sfx_flip.append(Audio.make_flip(k))
 	_sfx_win = Audio.make_win()
+	_sfx_thunder = Audio.make_thunder()
 	_p_place = AudioStreamPlayer.new(); add_child(_p_place)
 	_p_flip = AudioStreamPlayer.new(); _p_flip.max_polyphony = 8; add_child(_p_flip)
 	_p_win = AudioStreamPlayer.new(); add_child(_p_win)
+	_p_thunder = AudioStreamPlayer.new(); _p_thunder.max_polyphony = 4; add_child(_p_thunder)
 	# Vid inspelning: spara effekterna som .wav så muxern kan lägga dem på spåret
 	# (headless-drivern spelar inget). Interaktivt: spela direkt i _sfx().
 	if not _record_dir.is_empty():
 		_sfx_place.save_to_wav("%s/sfx_place.wav" % _record_dir)
 		_sfx_win.save_to_wav("%s/sfx_win.wav" % _record_dir)
+		_sfx_thunder.save_to_wav("%s/sfx_thunder.wav" % _record_dir)
 		for k in _sfx_flip.size():
 			_sfx_flip[k].save_to_wav("%s/sfx_flip_%d.wav" % [_record_dir, k])
 
-# emittera en ljudhändelse: logga (för muxern) + spela direkt om vi inte spelar in
-func _sfx(kind: String, idx: int = 0) -> void:
-	_events.append({"f": _frame, "kind": kind, "idx": idx})
+# emittera en ljudhändelse: logga (för muxern) + spela direkt om vi inte spelar in.
+# frame_offset låter åskan följa blixten med en liten fördröjning i inspelningen.
+func _sfx(kind: String, idx: int = 0, frame_offset: int = 0) -> void:
+	_events.append({"f": _frame + frame_offset, "kind": kind, "idx": idx})
 	if not _record_dir.is_empty():
 		return
 	match kind:
@@ -151,6 +169,8 @@ func _sfx(kind: String, idx: int = 0) -> void:
 			_p_flip.stream = _sfx_flip[idx % _sfx_flip.size()]; _p_flip.play()
 		"win":
 			_p_win.stream = _sfx_win; _p_win.play()
+		"thunder":
+			_p_thunder.stream = _sfx_thunder; _p_thunder.play()
 
 # ---------------------------------------------------------------- drama ----
 func _build_fx() -> void:
@@ -252,6 +272,32 @@ func _update_fx(dt: float) -> void:
 		mm.albedo_color = Color(0.9, 0.92, 0.96, 0.65 * (1.0 - k3) * (1.0 - k3))
 		alive.append(pf)
 	_puffs = alive
+	# blixt: en snabb dubbelblink-envelope som lyser upp scen + himmel
+	if _bolt_t < _bolt_dur:
+		_bolt_t += dt
+		var flick: float = maxf(exp(-_bolt_t * 9.0) * (0.6 + 0.4 * sin(_bolt_t * 80.0)), 0.0)
+		_bolt.light_energy = _bolt_peak * flick
+	else:
+		_bolt.light_energy = 0.0
+	if _sky_mat:
+		_sky_mat.set_shader_parameter("flash", clampf(_bolt.light_energy / 2.4, 0.0, 1.0))
+
+# ------------------------------------------------------------- blixt/åska ---
+func _schedule_bolts() -> void:
+	# några blixtnedslag utspridda över partiet, deterministisk jitter
+	var t := 4.0
+	var i := 0
+	while t < _play_dur - 1.5:
+		_bolt_times.append(t)
+		t += 8.0 + 4.0 * absf(_nrand(i * 7 + 3))     # ~8–12 s mellan blixtar
+		i += 1
+
+func _trigger_lightning() -> void:
+	_bolt_t = 0.0
+	_bolt_peak = 2.4
+	_sflash_t = 0.0
+	_sflash_amp = maxf(_sflash_amp, 0.38)            # kraftig helskärmsblixt
+	_sfx("thunder", 0, int(round(0.5 * _fps)))       # åskan följer ~0.5 s efter
 
 # ---------------------------------------------------------------- assets ---
 func _load_glb(path: String) -> Node3D:
@@ -397,6 +443,9 @@ func _place_start() -> void:
 # --------------------------------------------------------- animation ------
 func _step(dt: float) -> void:
 	_update_fx(dt)
+	if _bolt_i < _bolt_times.size() and _elapsed >= _bolt_times[_bolt_i]:
+		_bolt_i += 1
+		_trigger_lightning()
 	if _phase == "done":
 		_done_t += dt
 		return
@@ -465,6 +514,10 @@ func _run() -> void:
 		_step(dt)
 		_elapsed += dt
 		_update_camera()
+		if _sea_mat:
+			_sea_mat.set_shader_parameter("t", _elapsed)
+		if _sky_mat:
+			_sky_mat.set_shader_parameter("t", _elapsed)
 		await RenderingServer.frame_post_draw
 		if not _record_dir.is_empty():
 			var img := get_viewport().get_texture().get_image()
@@ -496,64 +549,134 @@ func _final_board() -> PackedInt32Array:
 	return b
 
 # ------------------------------------------------------------- staging ----
+const SEA_Y := -0.42        # havsnivå under ön
+const ISLAND_R := 0.72      # öns radie
+const COL_R := 0.56         # kolonnernas radie runt brädet
+
 func _build_stage() -> void:
 	var env := WorldEnvironment.new()
 	var e := Environment.new()
-	# Soft studio look with RICH contrast: a neutral medium-grey backdrop (not a
-	# washed white), low ambient so blacks stay black, and a soft directional key
-	# (soft shadows) instead of a hard point light so the highlights aren't harsh.
-	e.background_mode = Environment.BG_COLOR
-	e.background_color = Color(0.34, 0.35, 0.37)
-	e.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	e.ambient_light_color = Color(0.50, 0.54, 0.62)
-	e.ambient_light_energy = 0.10          # low → deep blacks, saturated felt
+	# Stormig utomhusscen: en mörk, molnig himmel (sky-shader), dis som smälter
+	# havet in i horisonten, och låg ambient så det svarta läser svart. AgX-tonemap.
+	_sky_mat = ShaderMaterial.new()
+	_sky_mat.shader = load("res://sky.gdshader")
+	var sky := Sky.new()
+	sky.sky_material = _sky_mat
+	e.background_mode = Environment.BG_SKY
+	e.sky = sky
+	e.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+	e.ambient_light_sky_contribution = 0.6
+	e.ambient_light_color = Color(0.40, 0.44, 0.52)
+	e.ambient_light_energy = 0.22
 	e.tonemap_mode = Environment.TONE_MAPPER_AGX
-	e.tonemap_white = 1.6
+	e.tonemap_white = 1.5
+	e.fog_enabled = true
+	e.fog_light_color = Color(0.34, 0.37, 0.43)
+	e.fog_density = 0.045
+	e.fog_sky_affect = 0.0                 # låt shader-himlen stå för horisonten
 	e.glow_enabled = true
-	e.glow_intensity = 0.06
-	e.glow_bloom = 0.02
+	e.glow_intensity = 0.10
+	e.glow_bloom = 0.05
 	env.environment = e
 	add_child(env)
 
-	# Soft directional key (the window/softbox): even, gentle shadows, so nothing
-	# is harshly blown; energy modest so the near-black frame/pieces read black.
+	# Överdimmig nyckel: sval, mjuk, uppifrån-sidan; måttlig energi så marmorn
+	# lyser men det svarta hålls svart.
 	var key := DirectionalLight3D.new()
-	key.light_color = Color(1.0, 0.98, 0.95)
-	key.light_energy = 1.6
-	key.light_angular_distance = 2.5       # soft shadow edges
+	key.light_color = Color(0.82, 0.87, 0.98)
+	key.light_energy = 1.35
+	key.light_angular_distance = 3.0
 	key.shadow_enabled = true
-	key.rotation = Vector3(deg_to_rad(-58.0), deg_to_rad(-32.0), 0.0)
+	key.rotation = Vector3(deg_to_rad(-56.0), deg_to_rad(-34.0), 0.0)
 	add_child(key)
-	# a small omni high up for a single controlled specular glint on the gloss
-	var spec := OmniLight3D.new()
-	spec.light_color = Color(0.95, 0.97, 1.0)
-	spec.light_energy = 1.2
-	spec.omni_range = 2.4
-	spec.position = Vector3(0.28, 0.6, 0.35)
-	add_child(spec)
-	# gentle cool fill from the camera side so shadows aren't crushed to pure black
+	# sval fill från kamerahållet så skuggorna inte kvävs till becksvart
 	var fill := OmniLight3D.new()
-	fill.light_color = Color(0.80, 0.85, 0.95)
-	fill.light_energy = 0.35
+	fill.light_color = Color(0.72, 0.80, 0.95)
+	fill.light_energy = 0.30
 	fill.omni_range = 4.0
-	fill.position = Vector3(0.05, 0.4, 0.7)
+	fill.position = Vector3(0.05, 0.5, 0.7)
 	add_child(fill)
 
-	var table := MeshInstance3D.new()
-	var pm := PlaneMesh.new(); pm.size = Vector2(4, 4)
-	table.mesh = pm
-	var tm := StandardMaterial3D.new()
-	tm.albedo_color = Color(0.30, 0.31, 0.34); tm.roughness = 0.6   # neutral tabletop
-	table.material_override = tm
-	table.position = Vector3(0, -0.001, 0)
-	add_child(table)
+	# blixtljus (mörkt tills det slår till), riktat snett uppifrån
+	_bolt = DirectionalLight3D.new()
+	_bolt.light_color = Color(0.90, 0.95, 1.0)
+	_bolt.light_energy = 0.0
+	_bolt.rotation = Vector3(deg_to_rad(-62.0), deg_to_rad(40.0), 0.0)
+	add_child(_bolt)
+
+	_build_sea()
+	_build_island()
+	_build_colonnade()
 
 	_cam = Camera3D.new()
 	_cam.fov = 60
-	# pulled back + up a touch so the board AND the two side trays fit frame.
-	# look_at() needs the node in-tree; look_at_from_position() does not.
 	add_child(_cam)
 	_update_camera()   # sätt startpose (rakt ovanför)
+
+# stort vågplan med den deterministiska hav-shadern
+func _build_sea() -> void:
+	var sea := MeshInstance3D.new()
+	var pm := PlaneMesh.new()
+	pm.size = Vector2(60.0, 60.0)
+	pm.subdivide_width = 140
+	pm.subdivide_depth = 140
+	sea.mesh = pm
+	_sea_mat = ShaderMaterial.new()
+	_sea_mat.shader = load("res://sea.gdshader")
+	sea.material_override = _sea_mat
+	sea.position = Vector3(0.0, SEA_Y, 0.0)
+	add_child(sea)
+
+# liten klippö med marmortopp som brädet och kolonnerna står på
+func _build_island() -> void:
+	# våt mörk klippa
+	var rock := MeshInstance3D.new()
+	var cyl := CylinderMesh.new()
+	cyl.top_radius = ISLAND_R
+	cyl.bottom_radius = ISLAND_R * 1.15
+	cyl.height = -SEA_Y + 0.2
+	cyl.radial_segments = 40
+	rock.mesh = cyl
+	var rm := StandardMaterial3D.new()
+	rm.albedo_color = Color(0.10, 0.11, 0.12)
+	rm.roughness = 0.85
+	rock.material_override = rm
+	rock.position = Vector3(0.0, (SEA_Y - 0.2) / 2.0, 0.0)   # topp vid y≈0
+	add_child(rock)
+	# marmorplatta i toppen
+	var top := MeshInstance3D.new()
+	var tc := CylinderMesh.new()
+	tc.top_radius = ISLAND_R * 1.02
+	tc.bottom_radius = ISLAND_R
+	tc.height = 0.06
+	tc.radial_segments = 48
+	top.mesh = tc
+	var tm := StandardMaterial3D.new()
+	tm.albedo_color = Color(0.80, 0.79, 0.74)
+	tm.roughness = 0.35
+	top.material_override = tm
+	top.position = Vector3(0.0, -0.03, 0.0)
+	add_child(top)
+
+# ring av marmorkolonner runt brädet — glesad vid framsidan (az=0) så
+# slutvyn av brädet blir fri
+func _build_colonnade() -> void:
+	var col := _load_glb(_col_glb)
+	if col == null:
+		return
+	col.visible = false
+	add_child(col)
+	var h := _aabb(col).size.y
+	var target_h := 0.92
+	var sc := target_h / maxf(h, 0.001)
+	for phi_deg in [55.0, 100.0, 145.0, 180.0, 215.0, 260.0, 305.0]:
+		var phi := deg_to_rad(phi_deg)
+		var inst: Node3D = col.duplicate()
+		inst.visible = true
+		inst.scale = Vector3(sc, sc, sc)
+		inst.position = Vector3(COL_R * sin(phi), 0.0, COL_R * cos(phi))
+		inst.rotation.y = _nrand(int(phi_deg)) * 0.15   # liten slumpvinkel
+		add_child(inst)
 
 # Spiralnedstigning: elevationen sjunker mjukt från nästan rakt ovanför till en
 # fin sidovy medan azimuten snurrar CAM_SPINS varv och bromsar in i sluts läget.
