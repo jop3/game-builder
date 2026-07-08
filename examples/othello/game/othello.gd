@@ -17,11 +17,12 @@ var _obsidian_glb := "res://assets/obsidian.glb"
 var _pearl_glb := "res://assets/pearl.glb"
 
 # --- timeline knobs (seconds) — the feel rubric lives here ---
-const PLACE_T := 0.22      # new disc drops + settles
-const FLIP_DUR := 0.30     # one disc's 180° turn
-const FLIP_STAGGER := 0.07 # delay between successive discs in the captured run
-const PAUSE_T := 0.16      # beat between moves
-const END_HOLD := 2.4      # linger on the final board
+const THINK_T := 0.05      # brief beat before a move
+const PLACE_T := 0.16      # new disc drops + settles
+const FLIP_DUR := 0.24     # one disc's 180° turn
+const FLIP_STAGGER := 0.06 # delay between successive discs in the captured run
+const PAUSE_T := 0.10      # beat between moves
+const END_HOLD := 2.6      # linger on the final board
 
 var _fps := 30.0
 var _record_dir := ""
@@ -184,7 +185,7 @@ func _step(dt: float) -> void:
 	var mv: Dictionary = _moves[_mi]
 	match _phase:
 		"think":
-			if _pt >= 0.08:
+			if _pt >= THINK_T:
 				# drop the new disc in
 				var h := _new_disc(mv.side, mv.cell)
 				h.scale = Vector3(0.2, 0.2, 0.2)
@@ -257,27 +258,29 @@ func _build_stage() -> void:
 	e.background_mode = Environment.BG_COLOR
 	e.background_color = Color(0.04, 0.03, 0.03)
 	e.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	e.ambient_light_color = Color(0.30, 0.26, 0.34)
-	e.ambient_light_energy = 0.25
-	e.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	e.ambient_light_color = Color(0.28, 0.24, 0.34)
+	e.ambient_light_energy = 0.05        # near-dark ambient so the obsidian reads black
+	e.tonemap_mode = Environment.TONE_MAPPER_AGX
 	e.glow_enabled = true
-	e.glow_intensity = 0.25
+	e.glow_intensity = 0.12
+	e.glow_bloom = 0.05
 	env.environment = e
 	add_child(env)
 
-	# warm candlelight key
+	# warm candlelight key — restrained so it pools on the board, not blows it out
 	var key := OmniLight3D.new()
-	key.light_color = Color(1.0, 0.72, 0.42)
-	key.light_energy = 6.0
-	key.omni_range = 3.0
-	key.position = Vector3(-0.28, 0.42, -0.2)
+	key.light_color = Color(1.0, 0.66, 0.34)
+	key.light_energy = 2.4
+	key.omni_range = 2.2
+	key.omni_attenuation = 1.4
+	key.position = Vector3(-0.26, 0.40, -0.18)
 	key.shadow_enabled = true
 	add_child(key)
 	var fill := OmniLight3D.new()
-	fill.light_color = Color(0.55, 0.66, 0.95)
-	fill.light_energy = 1.2
-	fill.omni_range = 3.0
-	fill.position = Vector3(0.5, 0.4, 0.4)
+	fill.light_color = Color(0.5, 0.62, 0.95)
+	fill.light_energy = 0.5
+	fill.omni_range = 2.6
+	fill.position = Vector3(0.55, 0.42, 0.45)
 	add_child(fill)
 
 	var table := MeshInstance3D.new()
@@ -290,7 +293,8 @@ func _build_stage() -> void:
 	add_child(table)
 
 	var cam := Camera3D.new()
-	cam.position = Vector3(0.0, 0.46, 0.42)
-	cam.look_at(Vector3(0, 0.02, 0.0), Vector3.UP)
 	cam.fov = 58
+	# look_at() needs the node in-tree; look_at_from_position() does not, so we
+	# can aim before adding it (avoids the "Node not inside tree" error).
+	cam.look_at_from_position(Vector3(0.0, 0.46, 0.42), Vector3(0.0, 0.02, 0.0), Vector3.UP)
 	add_child(cam)

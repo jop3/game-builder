@@ -1,0 +1,8 @@
+# Godot editor/import cache — regenerated on import, not source.
+.godot/
+# Import sidecars + extracted texture maps for the runtime-loaded .glb
+# (the scene loads them via GLTFDocument, so these aren't needed in git).
+assets/*.import
+assets/*_albedo.png
+assets/*_normal.png
+assets/*_orm.png
