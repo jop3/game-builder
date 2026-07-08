@@ -92,25 +92,29 @@ bsdf.inputs["Base Color"].default_value = (0.06, 0.035, 0.02, 1.0)
 bsdf.inputs["Roughness"].default_value = 0.7
 table.data.materials.append(tmat)
 
-# warm key (candlelight) high on one side
-key = bpy.data.lights.new("key", "AREA"); key.energy = 60; key.size = 0.9
-key.color = (1.0, 0.72, 0.42)
+# warm key (candlelight) high on one side. Deliberately restrained: the whole
+# point of Othello is the light-vs-dark disc contrast, which over-lighting
+# destroys (obsidian washes to grey). Keep it dim + warm so the dark piece
+# reads dark and the mood stays candlelit.
+key = bpy.data.lights.new("key", "AREA"); key.energy = 24; key.size = 0.55
+key.color = (1.0, 0.66, 0.36)
 ko = bpy.data.objects.new("key", key); bpy.context.collection.objects.link(ko)
-ko.location = (cx - 0.35, cy - 0.25, 0.55); ko.rotation_euler = (math.radians(35), math.radians(-18), 0)
-# cool soft fill
-fill = bpy.data.lights.new("fill", "AREA"); fill.energy = 12; fill.size = 1.6
-fill.color = (0.6, 0.7, 0.95)
+ko.location = (cx - 0.32, cy - 0.22, 0.48); ko.rotation_euler = (math.radians(40), math.radians(-15), 0)
+# barely-there cool fill: just keeps the far shadows from crushing to pure black
+fill = bpy.data.lights.new("fill", "AREA"); fill.energy = 1.0; fill.size = 2.0
+fill.color = (0.5, 0.62, 0.95)
 fo = bpy.data.objects.new("fill", fill); bpy.context.collection.objects.link(fo)
-fo.location = (cx + 0.5, cy + 0.4, 0.5)
-# rim
-rim = bpy.data.lights.new("rim", "AREA"); rim.energy = 25; rim.size = 0.5
+fo.location = (cx + 0.6, cy + 0.5, 0.5)
+# warm rim to catch the disc edges and separate the dark pieces from the board
+rim = bpy.data.lights.new("rim", "AREA"); rim.energy = 9; rim.size = 0.35
+rim.color = (1.0, 0.78, 0.5)
 ro = bpy.data.objects.new("rim", rim); bpy.context.collection.objects.link(ro)
-ro.location = (cx + 0.1, cy + 0.55, 0.35)
+ro.location = (cx + 0.12, cy + 0.55, 0.3)
 
 world = bpy.data.worlds.new("w"); bpy.context.scene.world = world
 world.use_nodes = True
-world.node_tree.nodes["Background"].inputs["Color"].default_value = (0.03, 0.03, 0.045, 1.0)
-world.node_tree.nodes["Background"].inputs["Strength"].default_value = 0.3
+world.node_tree.nodes["Background"].inputs["Color"].default_value = (0.015, 0.015, 0.02, 1.0)
+world.node_tree.nodes["Background"].inputs["Strength"].default_value = 0.02
 
 cam = bpy.data.cameras.new("cam"); camo = bpy.data.objects.new("cam", cam)
 bpy.context.collection.objects.link(camo); bpy.context.scene.camera = camo
@@ -128,6 +132,7 @@ try: sc.cycles.device = "CPU"
 except Exception: pass
 sc.render.resolution_x = 1600; sc.render.resolution_y = 1100
 sc.view_settings.view_transform = "AgX"
+sc.view_settings.exposure = -1.1        # pull the whole shot down into candlelit territory
 sc.render.image_settings.file_format = "PNG"
 sc.render.filepath = OUT
 bpy.ops.render.render(write_still=True)
