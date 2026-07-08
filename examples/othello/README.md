@@ -37,8 +37,9 @@ game/
   test_rules.gd   14 headless checks incl. verify-the-verifier fixtures
   othello.gd/.tscn  loads the .glb at runtime, plays a full bot-vs-bot game,
                     animates the flip cascade, records deterministically
-  assets/*.glb    the validated fantasy_tabletop board + obsidian + pearl discs
-  othello_game.mp4  a full recorded game (Obsidian 40 – Moonstone 24)
+  assets/board.glb  the validated reversi_classic green-felt board (black frame)
+  assets/disc.glb   the validated TWO-TONE disc (black one face, white the other)
+  othello_game.mp4  a full recorded game on the realistic Reversi set (Black 40 – White 24)
 ```
 
 Run the tests: `godot --headless --path game --script res://test_rules.gd`
@@ -63,22 +64,31 @@ blender --background --python-exit-code 1 --python examples/othello/assemble_ren
 
 ## Result
 
-All three assets reached **`validated`** (V1 static gate + V2 vision inspection,
-all blocker checks passing) in one iteration each, delivered and import-verified
-in Godot. The board is an 8x8 aged-oak grid with a raised dark-iron lattice and
-border rim; the discs are a pale mosaic-stone "Moonstone" and a dark forged
-"Obsidian", giving the light/dark contrast Othello needs.
+Every asset reached **`validated`** (V1 static gate + V2 vision inspection, all
+blocker checks passing) in one iteration and was import-verified in Godot. The
+look evolved across three themes as the design was refined:
 
-### Honest notes (the pipeline's own `worst_thing` findings)
+1. **`fantasy_medieval`** — aged-oak board + mosaic-stone / forged-iron discs.
+2. **`fantasy_tabletop`** — warm honey-oak board + obsidian-black / pearl-white
+   discs (higher contrast).
+3. **`reversi_classic`** (the current game set) — a realistic Reversi look: a
+   **green-felt board with a black moulded frame** and thin grid lines, and a
+   **two-tone disc** (glossy black on one face, white on the other, split at the
+   rim) so a capture is a genuine 180° **turn-over**, not a colour swap. The
+   `game/` scene stages it like the real set: light tabletop, side trays of
+   stacked striped discs, restrained lighting so black reads black.
 
-- The board's aged-wood leans grungy/dark ("weathered dungeon board" rather than
-  warm honey oak) — the fantasy_medieval theme has no lighter wood recipe.
-- The Moonstone disc uses `fantasy_stone_wall` (the only pale material), so its
-  surface is a busy cobble/mosaic rather than smooth polished stone.
-- LODs are `"none"`: the overlapping-box board and the beveled disc are manifold
-  at full resolution but not decimation-robust, and Godot 4 auto-generates mesh
-  LODs on import anyway. A future pass could make the geometry decimation-safe
-  or add a dedicated `fantasy_tabletop` theme (smooth pale stone + warm oak).
+`othello_game.mp4` is a full recorded game on that set (Black 40 – White 24).
 
-The playable game (spec milestones M1/M3/M4) is **specced, not built** this round
-— this example delivers the spec and the graphics, assembled and rendered.
+### Notes
+
+- The two-tone disc is one mesh bisected at its equator: top half → black
+  material, bottom half → white (`generators/props/game_disc.py`); the game
+  encodes which face is up as `rotation.x` and animates a real turn-over.
+- A near-black surface only stays black under *moderate* light — over-bright
+  even lighting lifts a 2.5%-albedo material to grey and kills the contrast, so
+  the scene keeps a light backdrop but a controlled key.
+- LODs are `"none"` (Godot 4 auto-generates mesh LODs on import).
+
+The full playable game (rules + bot + flip animation, spec M1/M3/M4) **is built**
+here; the remaining spec milestones (difficulty tiers, hotseat) are future work.
