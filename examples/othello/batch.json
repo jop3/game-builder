@@ -1,0 +1,71 @@
+[
+  {
+    "schema_version": 1,
+    "asset_id": "othello_board_01",
+    "category": "prop_small",
+    "theme": "fantasy_medieval",
+    "platform_profile": "desktop_mid",
+    "seed": 8801,
+    "description": "A fantasy Othello game board: an 8x8 grid carved from aged oak with an inlaid dark-iron grid and a raised iron border rim, hand-built medieval tabletop board",
+    "generator": "props/game_board",
+    "topology": "closed",
+    "lods": "none",
+    "budget_overrides": {
+      "max_texture_px": 512
+    },
+    "tags": [
+      "kit:othello",
+      "board"
+    ]
+  },
+  {
+    "schema_version": 1,
+    "asset_id": "othello_disc_moonstone_01",
+    "category": "prop_small",
+    "theme": "fantasy_medieval",
+    "platform_profile": "desktop_mid",
+    "seed": 8802,
+    "description": "A pale ivory moonstone Othello playing disc, a smooth polished light-stone counter with rounded rim",
+    "generator": "props/game_disc",
+    "param_overrides": {
+      "materials": [
+        "fantasy_stone_wall"
+      ]
+    },
+    "topology": "closed",
+    "lods": "none",
+    "budget_overrides": {
+      "max_texture_px": 512
+    },
+    "tags": [
+      "kit:othello",
+      "marker",
+      "light"
+    ]
+  },
+  {
+    "schema_version": 1,
+    "asset_id": "othello_disc_obsidian_01",
+    "category": "prop_small",
+    "theme": "fantasy_medieval",
+    "platform_profile": "desktop_mid",
+    "seed": 8803,
+    "description": "A polished black obsidian Othello playing disc, a dark volcanic-glass counter with rounded rim",
+    "generator": "props/game_disc",
+    "param_overrides": {
+      "materials": [
+        "fantasy_iron_trim"
+      ]
+    },
+    "topology": "closed",
+    "lods": "none",
+    "budget_overrides": {
+      "max_texture_px": 512
+    },
+    "tags": [
+      "kit:othello",
+      "marker",
+      "dark"
+    ]
+  }
+]
