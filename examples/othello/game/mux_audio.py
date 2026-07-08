@@ -49,6 +49,9 @@ def main() -> None:
     sfx["place"] = place
     win, _ = _read_wav(os.path.join(args.dir, "sfx_win.wav"))
     sfx["win"] = win
+    thunder_path = os.path.join(args.dir, "sfx_thunder.wav")
+    if os.path.exists(thunder_path):
+        sfx["thunder"], _ = _read_wav(thunder_path)
     flips = []
     for p in sorted(glob.glob(os.path.join(args.dir, "sfx_flip_*.wav"))):
         a, _ = _read_wav(p)
@@ -74,6 +77,8 @@ def main() -> None:
             mix(at, flips[int(idx_s) % len(flips)], 0.7)
         elif kind == "win":
             mix(at, sfx["win"], 0.8)
+        elif kind == "thunder" and "thunder" in sfx:
+            mix(at, sfx["thunder"], 0.85)
 
     # mjuk kompression av toppar + liten headroom
     peak = float(np.max(np.abs(master))) or 1.0

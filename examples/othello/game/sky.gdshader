@@ -4,10 +4,10 @@
 shader_type sky;
 
 uniform float t = 0.0;
-uniform vec3 horizon : source_color = vec3(0.30, 0.32, 0.36);
-uniform vec3 zenith : source_color = vec3(0.05, 0.06, 0.09);
-uniform vec3 cloud_dark : source_color = vec3(0.09, 0.10, 0.13);
-uniform vec3 cloud_light : source_color = vec3(0.46, 0.48, 0.53);
+uniform vec3 horizon : source_color = vec3(0.46, 0.49, 0.55);
+uniform vec3 zenith : source_color = vec3(0.13, 0.15, 0.21);
+uniform vec3 cloud_dark : source_color = vec3(0.16, 0.18, 0.23);
+uniform vec3 cloud_light : source_color = vec3(0.60, 0.63, 0.69);
 uniform float flash = 0.0;   // höjs vid blixtnedslag (lyser upp molnen)
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(41.3, 289.1))) * 43758.5453); }

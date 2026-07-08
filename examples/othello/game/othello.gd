@@ -62,9 +62,9 @@ var _elapsed := 0.0        # total speltid (deterministisk, dt-summerad)
 var _play_dur := 1.0       # partiets speltid i sekunder (utom END_HOLD)
 const CAM_CENTER := Vector3(0.0, 0.015, 0.0)
 const CAM_EL_TOP := 87.0   # ° elevation vid start (nästan rakt ovanför)
-const CAM_EL_END := 44.0   # ° elevation vid landning (fin sidovy)
-const CAM_D_TOP := 0.94    # kameraavstånd uppe
-const CAM_D_END := 0.80    # kameraavstånd nere
+const CAM_EL_END := 32.0   # ° elevation vid landning (låg sidovy → havet syns)
+const CAM_D_TOP := 1.0     # kameraavstånd uppe
+const CAM_D_END := 0.98    # kameraavstånd nere (tillbakadragen så horisonten ryms)
 const CAM_SPINS := 1.5     # antal varv runt bordet under nedstigningen
 
 # --- drama vid stora vändningskaskader ---
@@ -549,9 +549,9 @@ func _final_board() -> PackedInt32Array:
 	return b
 
 # ------------------------------------------------------------- staging ----
-const SEA_Y := -0.42        # havsnivå under ön
-const ISLAND_R := 0.72      # öns radie
-const COL_R := 0.56         # kolonnernas radie runt brädet
+const SEA_Y := -0.16        # havsnivå strax under öns marmorkant
+const ISLAND_R := 0.62      # öns radie (liten ö → havet syns runtom)
+const COL_R := 0.44         # kolonnernas radie runt brädet
 
 func _build_stage() -> void:
 	var env := WorldEnvironment.new()
