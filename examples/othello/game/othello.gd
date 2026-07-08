@@ -118,14 +118,18 @@ func _load_assets() -> void:
 	_disc_h = _aabb(_disc_proto).size.y            # for a center-pivot flip
 
 func _build_trays() -> void:
-	# Two side trays of stacked reserve discs, like the real set (the rim edges
-	# read as striped black/white columns). Purely decorative, not game state.
+	# Two side trays holding the reserve discs as a HORIZONTAL ROLL lying in the
+	# tray channel (discs on edge, axis along Z), not a standing column -- their
+	# rims read as a striped black/white roll, like the real set.
 	var half := _bw / 2.0
+	var rad := _aabb(_disc_proto).size.x / 2.0     # disc radius
+	var n := 16
+	var roll := n * _disc_h
 	for sign in [-1.0, 1.0]:
 		var tx: float = _cx + sign * (half + 0.052)
 		var base := MeshInstance3D.new()
 		var bm := BoxMesh.new()
-		bm.size = Vector3(0.062, 0.012, _bw * 0.86)
+		bm.size = Vector3(0.058, 0.012, roll + 0.03)
 		base.mesh = bm
 		var mat := StandardMaterial3D.new()
 		mat.albedo_color = Color(0.02, 0.02, 0.02)
@@ -133,12 +137,15 @@ func _build_trays() -> void:
 		base.material_override = mat
 		base.position = Vector3(tx, 0.006, _cy)
 		add_child(base)
-		for i in 14:
-			var d: Node3D = _disc_proto.duplicate()
-			d.visible = true
-			add_child(d)
-			d.position = Vector3(tx, 0.012 + _disc_h * i, _cy)
-			d.rotation.y = deg_to_rad(4.0 * (1 if i % 2 else -1))
+		for i in n:
+			var holder := Node3D.new()
+			add_child(holder)
+			holder.position = Vector3(tx, 0.012 + rad, _cy - roll / 2.0 + (i + 0.5) * _disc_h)
+			holder.rotation.x = PI / 2.0        # lay the disc on its edge (roll axis along Z)
+			var vis: Node3D = _disc_proto.duplicate()
+			vis.visible = true
+			vis.position.y = -_disc_h / 2.0     # centre the disc on the holder
+			holder.add_child(vis)
 
 func _cell_pos(cell: int) -> Vector3:
 	var r: int = cell / 8
@@ -279,55 +286,51 @@ func _final_board() -> PackedInt32Array:
 func _build_stage() -> void:
 	var env := WorldEnvironment.new()
 	var e := Environment.new()
-	# Realistic product-shot look (matching a real Reversi set photo): bright,
-	# fairly even, neutral-cool light on a light table so the green felt reads
-	# green and the glossy black/white pieces show crisp specular highlights.
-	# Product-shot look, but restrained: a near-black plastic frame + black disc
-	# face only stay BLACK if the lighting is moderate. Over-bright even light
-	# lifts a 2.5%-albedo surface to grey and kills the black/white contrast, so
-	# keep a light backdrop (like the photo's white table) but a controlled key.
+	# Soft studio look with RICH contrast: a neutral medium-grey backdrop (not a
+	# washed white), low ambient so blacks stay black, and a soft directional key
+	# (soft shadows) instead of a hard point light so the highlights aren't harsh.
 	e.background_mode = Environment.BG_COLOR
-	e.background_color = Color(0.60, 0.61, 0.63)
+	e.background_color = Color(0.34, 0.35, 0.37)
 	e.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	e.ambient_light_color = Color(0.55, 0.58, 0.64)
-	e.ambient_light_energy = 0.22
+	e.ambient_light_color = Color(0.50, 0.54, 0.62)
+	e.ambient_light_energy = 0.10          # low → deep blacks, saturated felt
 	e.tonemap_mode = Environment.TONE_MAPPER_AGX
-	e.tonemap_white = 2.0
+	e.tonemap_white = 1.6
 	e.glow_enabled = true
-	e.glow_intensity = 0.10
-	e.glow_bloom = 0.04
+	e.glow_intensity = 0.06
+	e.glow_bloom = 0.02
 	env.environment = e
 	add_child(env)
 
-	# key light high above (the overhead lamp) — the small specular it casts is
-	# what makes the glossy pieces read as polished; moderate so black stays black.
-	var key := OmniLight3D.new()
-	key.light_color = Color(1.0, 0.98, 0.94)
-	key.light_energy = 3.6
-	key.omni_range = 4.0
-	key.omni_attenuation = 1.0
-	key.position = Vector3(-0.2, 0.75, -0.05)
+	# Soft directional key (the window/softbox): even, gentle shadows, so nothing
+	# is harshly blown; energy modest so the near-black frame/pieces read black.
+	var key := DirectionalLight3D.new()
+	key.light_color = Color(1.0, 0.98, 0.95)
+	key.light_energy = 1.6
+	key.light_angular_distance = 2.5       # soft shadow edges
 	key.shadow_enabled = true
+	key.rotation = Vector3(deg_to_rad(-58.0), deg_to_rad(-32.0), 0.0)
 	add_child(key)
-	# a second cooler highlight from the front-right for a twin specular dot
+	# a small omni high up for a single controlled specular glint on the gloss
 	var spec := OmniLight3D.new()
 	spec.light_color = Color(0.95, 0.97, 1.0)
-	spec.light_energy = 1.8
-	spec.omni_range = 3.0
-	spec.position = Vector3(0.45, 0.5, 0.5)
+	spec.light_energy = 1.2
+	spec.omni_range = 2.4
+	spec.position = Vector3(0.28, 0.6, 0.35)
 	add_child(spec)
+	# gentle cool fill from the camera side so shadows aren't crushed to pure black
 	var fill := OmniLight3D.new()
-	fill.light_color = Color(0.85, 0.88, 0.95)
-	fill.light_energy = 0.6
+	fill.light_color = Color(0.80, 0.85, 0.95)
+	fill.light_energy = 0.35
 	fill.omni_range = 4.0
-	fill.position = Vector3(0.1, 0.35, 0.7)
+	fill.position = Vector3(0.05, 0.4, 0.7)
 	add_child(fill)
 
 	var table := MeshInstance3D.new()
 	var pm := PlaneMesh.new(); pm.size = Vector2(4, 4)
 	table.mesh = pm
 	var tm := StandardMaterial3D.new()
-	tm.albedo_color = Color(0.72, 0.72, 0.74); tm.roughness = 0.55   # light tabletop
+	tm.albedo_color = Color(0.30, 0.31, 0.34); tm.roughness = 0.6   # neutral tabletop
 	table.material_override = tm
 	table.position = Vector3(0, -0.001, 0)
 	add_child(table)

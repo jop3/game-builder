@@ -9,7 +9,7 @@ from assetpipe.matlib import nodes
 PARAM_SCHEMA = {
     "type": "object",
     "properties": {
-        "roughness": {"type": "number", "minimum": 0.05, "maximum": 0.3, "default": 0.13},
+        "roughness": {"type": "number", "minimum": 0.05, "maximum": 0.3, "default": 0.11},
     },
     "additionalProperties": False,
 }
@@ -33,8 +33,8 @@ def build(nt, params: dict, rng, palette_dict: dict) -> None:
     # Bright neutral white, a hair below the S16 blown ceiling (0.98).
     band = nt.nodes.new("ShaderNodeMapRange")
     nt.links.new(breakup.outputs["Fac"], band.inputs["Value"])
-    band.inputs["To Min"].default_value = 0.90
-    band.inputs["To Max"].default_value = 0.96
+    band.inputs["To Min"].default_value = 0.94
+    band.inputs["To Max"].default_value = 0.985
     grey = nt.nodes.new("ShaderNodeCombineColor")
     for ch in ("Red", "Green", "Blue"):
         nt.links.new(band.outputs["Result"], grey.inputs[ch])

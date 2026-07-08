@@ -35,8 +35,8 @@ def build(nt, params: dict, rng, palette_dict: dict) -> None:
     # Near-pure black, kept just above the S16 luminance floor (0.02).
     band = nt.nodes.new("ShaderNodeMapRange")
     nt.links.new(breakup.outputs["Fac"], band.inputs["Value"])
-    band.inputs["To Min"].default_value = 0.021
-    band.inputs["To Max"].default_value = 0.030
+    band.inputs["To Min"].default_value = 0.0205
+    band.inputs["To Max"].default_value = 0.026
     grey = nt.nodes.new("ShaderNodeCombineColor")
     for ch in ("Red", "Green", "Blue"):
         nt.links.new(band.outputs["Result"], grey.inputs[ch])
