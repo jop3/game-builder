@@ -26,6 +26,25 @@ othello_board_render.png            the assembled fantasy Othello board.
 The generators that build the meshes live in the pipeline proper:
 `assetpipe/generators/props/game_board.py` and `.../game_disc.py`.
 
+### The playable game (`game/`)
+
+A working Godot Othello, built to the spec's M1:
+
+```
+game/
+  rules.gd        pure rules (one shared 8-direction table, legal moves, flip, terminal, score)
+  bot.gd          deterministic corner-aware bot (positional weights + mobility)
+  test_rules.gd   14 headless checks incl. verify-the-verifier fixtures
+  othello.gd/.tscn  loads the .glb at runtime, plays a full bot-vs-bot game,
+                    animates the flip cascade, records deterministically
+  assets/*.glb    the validated fantasy_tabletop board + obsidian + pearl discs
+  othello_game.mp4  a full recorded game (Obsidian 40 – Moonstone 24)
+```
+
+Run the tests: `godot --headless --path game --script res://test_rules.gd`
+Play it:       `godot --path game res://othello.tscn`
+Record a game: `godot --path game res://othello.tscn -- --record=DIR --fps=24`
+
 ## How the graphics were produced (reproducible)
 
 ```bash
