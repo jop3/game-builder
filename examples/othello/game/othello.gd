@@ -282,24 +282,28 @@ func _build_stage() -> void:
 	# Realistic product-shot look (matching a real Reversi set photo): bright,
 	# fairly even, neutral-cool light on a light table so the green felt reads
 	# green and the glossy black/white pieces show crisp specular highlights.
+	# Product-shot look, but restrained: a near-black plastic frame + black disc
+	# face only stay BLACK if the lighting is moderate. Over-bright even light
+	# lifts a 2.5%-albedo surface to grey and kills the black/white contrast, so
+	# keep a light backdrop (like the photo's white table) but a controlled key.
 	e.background_mode = Environment.BG_COLOR
-	e.background_color = Color(0.62, 0.63, 0.65)
+	e.background_color = Color(0.60, 0.61, 0.63)
 	e.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	e.ambient_light_color = Color(0.62, 0.64, 0.68)
-	e.ambient_light_energy = 0.6
+	e.ambient_light_color = Color(0.55, 0.58, 0.64)
+	e.ambient_light_energy = 0.22
 	e.tonemap_mode = Environment.TONE_MAPPER_AGX
-	e.tonemap_white = 6.0
+	e.tonemap_white = 2.0
 	e.glow_enabled = true
-	e.glow_intensity = 0.18
-	e.glow_bloom = 0.05
+	e.glow_intensity = 0.10
+	e.glow_bloom = 0.04
 	env.environment = e
 	add_child(env)
 
-	# Bright soft key high above (the overhead lamp) — the small specular it
-	# casts is what makes the glossy pieces read as polished.
+	# key light high above (the overhead lamp) — the small specular it casts is
+	# what makes the glossy pieces read as polished; moderate so black stays black.
 	var key := OmniLight3D.new()
 	key.light_color = Color(1.0, 0.98, 0.94)
-	key.light_energy = 8.0
+	key.light_energy = 3.6
 	key.omni_range = 4.0
 	key.omni_attenuation = 1.0
 	key.position = Vector3(-0.2, 0.75, -0.05)
@@ -308,13 +312,13 @@ func _build_stage() -> void:
 	# a second cooler highlight from the front-right for a twin specular dot
 	var spec := OmniLight3D.new()
 	spec.light_color = Color(0.95, 0.97, 1.0)
-	spec.light_energy = 3.0
+	spec.light_energy = 1.8
 	spec.omni_range = 3.0
 	spec.position = Vector3(0.45, 0.5, 0.5)
 	add_child(spec)
 	var fill := OmniLight3D.new()
 	fill.light_color = Color(0.85, 0.88, 0.95)
-	fill.light_energy = 1.5
+	fill.light_energy = 0.6
 	fill.omni_range = 4.0
 	fill.position = Vector3(0.1, 0.35, 0.7)
 	add_child(fill)
