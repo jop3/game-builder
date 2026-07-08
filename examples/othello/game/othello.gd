@@ -53,13 +53,35 @@ var _done_t := 0.0
 var _flip_fired := {}      # i -> true, vilka vändningar i draget som redan ljudit
 var _win_fired := false
 
-# --- kamera-panorering ---
+# --- kamera-spiral ---
+# Kameran startar rakt ovanför och spiralar långsamt nedåt runt bordet, och
+# landar i en tydlig sidovy PRECIS när partiet är slut. Allt drivs av _elapsed
+# (dt-summerad) mot partiets kända längd _play_dur → deterministiskt.
 var _cam: Camera3D
 var _elapsed := 0.0        # total speltid (deterministisk, dt-summerad)
-const CAM_R := 0.52        # kamerans radie i XZ-planet runt brädets mitt
-const CAM_Y := 0.54        # kamerahöjd
-const CAM_SWEEP_DEG := 30.0 # ± azimut-amplitud för den långsamma pannan
-const CAM_PERIOD := 26.0   # sekunder för en fram-och-tillbaka-svep
+var _play_dur := 1.0       # partiets speltid i sekunder (utom END_HOLD)
+const CAM_CENTER := Vector3(0.0, 0.015, 0.0)
+const CAM_EL_TOP := 87.0   # ° elevation vid start (nästan rakt ovanför)
+const CAM_EL_END := 44.0   # ° elevation vid landning (fin sidovy)
+const CAM_D_TOP := 0.94    # kameraavstånd uppe
+const CAM_D_END := 0.80    # kameraavstånd nere
+const CAM_SPINS := 1.5     # antal varv runt bordet under nedstigningen
+
+# --- drama vid stora vändningskaskader ---
+const DRAMA_MIN := 4       # minsta antal vändningar som utlöser effekt
+var _flash: OmniLight3D     # kort ljusblixt vid draget
+var _flash_t := 999.0
+var _flash_dur := 0.30
+var _flash_peak := 0.0
+var _sflash: ColorRect      # subtil helskärmsblixt
+var _sflash_t := 999.0
+var _sflash_dur := 0.28
+var _sflash_amp := 0.0
+var _shake_t := 999.0       # liten kameraskak
+var _shake_dur := 0.35
+var _shake_amp := 0.0
+var _puffs := []            # aktiva rökpuffar (manuellt animerade)
+var _puff_tex: Texture2D
 
 # --- ljud ---
 var _sfx_place: AudioStreamWAV
@@ -78,13 +100,27 @@ func _ready() -> void:
 		elif a.begins_with("--disc="): _disc_glb = a.substr(7)
 
 	_build_stage()
+	_build_fx()
 	_build_audio()
 	_load_assets()
 	_build_trays()
 	_precompute_game()
+	_play_dur = _compute_play_dur()
 	_place_start()
 	# drive everything from a manual clock so recordings are deterministic
 	_run()
+
+# summera partiets exakta speltid (samma tidsbudget som _step förbrukar) så
+# kameraspiralen kan landa precis när sista draget är klart
+func _compute_play_dur() -> float:
+	var d := 0.0
+	for mv in _moves:
+		var k: int = mv.flips.size()
+		var flip_span := 0.0
+		if k > 0:
+			flip_span = float(k - 1) * FLIP_STAGGER + FLIP_DUR
+		d += THINK_T + PLACE_T + flip_span + PAUSE_T
+	return maxf(d, 1.0)
 
 # ----------------------------------------------------------------- ljud ----
 func _build_audio() -> void:
@@ -115,6 +151,107 @@ func _sfx(kind: String, idx: int = 0) -> void:
 			_p_flip.stream = _sfx_flip[idx % _sfx_flip.size()]; _p_flip.play()
 		"win":
 			_p_win.stream = _sfx_win; _p_win.play()
+
+# ---------------------------------------------------------------- drama ----
+func _build_fx() -> void:
+	# kort ljusblixt (positioneras vid draget när den utlöses)
+	_flash = OmniLight3D.new()
+	_flash.light_color = Color(0.82, 0.9, 1.0)
+	_flash.omni_range = 1.3
+	_flash.light_energy = 0.0
+	_flash.shadow_enabled = false
+	add_child(_flash)
+	# subtil helskärmsblixt (2D-overlay ovanpå vyn, kommer med i inspelningen)
+	var layer := CanvasLayer.new(); add_child(layer)
+	_sflash = ColorRect.new()
+	_sflash.color = Color(0.9, 0.95, 1.0, 0.0)
+	_sflash.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_sflash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(_sflash)
+	_puff_tex = _make_puff_tex()
+
+# mjuk rund prick (radiell alfa) att billboarda som rökpuff
+func _make_puff_tex() -> Texture2D:
+	var sz := 64
+	var img := Image.create(sz, sz, false, Image.FORMAT_RGBA8)
+	for y in sz:
+		for x in sz:
+			var dx := (x + 0.5) / sz - 0.5
+			var dy := (y + 0.5) / sz - 0.5
+			var d: float = sqrt(dx * dx + dy * dy) * 2.0
+			var a: float = clampf(1.0 - d, 0.0, 1.0)
+			img.set_pixel(x, y, Color(1, 1, 1, a * a))
+	return ImageTexture.create_from_image(img)
+
+# utlös dramaeffekt skalad efter hur många brickor som vänds
+func _trigger_drama(cell: int, count: int) -> void:
+	if count < DRAMA_MIN:
+		return
+	var f: float = clampf(float(count - DRAMA_MIN) / 4.0, 0.0, 1.0)
+	var p := _cell_pos(cell)
+	_flash.position = p + Vector3(0.0, 0.08, 0.0)
+	_flash_t = 0.0
+	_flash_peak = 3.0 + 6.0 * f
+	_sflash_t = 0.0
+	_sflash_amp = 0.10 + 0.22 * f
+	_shake_t = 0.0
+	_shake_amp = 0.008 + 0.016 * f
+	var n := 5 + int(round(5.0 * f))
+	for i in n:
+		_spawn_puff(p, cell * 17 + i)
+
+func _spawn_puff(p: Vector3, seedv: int) -> void:
+	var mi := MeshInstance3D.new()
+	var q := QuadMesh.new(); q.size = Vector2(0.05, 0.05)
+	mi.mesh = q
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	m.albedo_texture = _puff_tex
+	m.albedo_color = Color(0.9, 0.92, 0.96, 0.65)
+	mi.material_override = m
+	mi.position = p + Vector3(0.0, 0.02, 0.0)
+	add_child(mi)
+	var ang: float = _nrand(seedv * 3 + 1) * PI
+	var spd: float = 0.07 + 0.06 * absf(_nrand(seedv * 3 + 5))
+	var vel := Vector3(cos(ang) * spd, 0.11 + 0.05 * absf(_nrand(seedv * 3 + 9)), sin(ang) * spd)
+	_puffs.append({"n": mi, "m": m, "t": 0.0, "dur": 0.55 + 0.3 * absf(_nrand(seedv)), "vel": vel})
+
+# animera alla dramaeffekter för hand (deterministiskt, drivet av dt)
+func _update_fx(dt: float) -> void:
+	if _flash_t < _flash_dur:
+		_flash_t += dt
+		var k: float = clampf(1.0 - _flash_t / _flash_dur, 0.0, 1.0)
+		_flash.light_energy = _flash_peak * k * k
+	else:
+		_flash.light_energy = 0.0
+	var c := _sflash.color
+	if _sflash_t < _sflash_dur:
+		_sflash_t += dt
+		var k2: float = clampf(1.0 - _sflash_t / _sflash_dur, 0.0, 1.0)
+		c.a = _sflash_amp * k2 * k2
+	else:
+		c.a = 0.0
+	_sflash.color = c
+	if _shake_t < _shake_dur:
+		_shake_t += dt
+	var alive := []
+	for pf in _puffs:
+		pf.t += dt
+		var k3: float = pf.t / pf.dur
+		if k3 >= 1.0:
+			pf.n.queue_free()
+			continue
+		pf.vel.y -= 0.04 * dt
+		var mi: MeshInstance3D = pf.n
+		mi.position += pf.vel * dt
+		var sc: float = 1.0 + 2.2 * k3
+		mi.scale = Vector3(sc, sc, sc)
+		var mm: StandardMaterial3D = pf.m
+		mm.albedo_color = Color(0.9, 0.92, 0.96, 0.65 * (1.0 - k3) * (1.0 - k3))
+		alive.append(pf)
+	_puffs = alive
 
 # ---------------------------------------------------------------- assets ---
 func _load_glb(path: String) -> Node3D:
@@ -259,6 +396,7 @@ func _place_start() -> void:
 
 # --------------------------------------------------------- animation ------
 func _step(dt: float) -> void:
+	_update_fx(dt)
 	if _phase == "done":
 		_done_t += dt
 		return
@@ -287,6 +425,7 @@ func _step(dt: float) -> void:
 			if k >= 1.0:
 				_phase = "flip" if not mv.flips.is_empty() else "pause"
 				_flip_fired = {}
+				_trigger_drama(mv.cell, mv.flips.size())   # blixt/rök/skak vid stora kaskader
 				_pt = 0.0
 		"flip":
 			var flips: Array = mv.flips
@@ -414,13 +553,36 @@ func _build_stage() -> void:
 	# pulled back + up a touch so the board AND the two side trays fit frame.
 	# look_at() needs the node in-tree; look_at_from_position() does not.
 	add_child(_cam)
-	_update_camera()   # sätt startpose (azimut 0 = rakt framifrån)
+	_update_camera()   # sätt startpose (rakt ovanför)
 
-# Långsam panorering: kameran svänger mjukt i en båge (±CAM_SWEEP_DEG) runt
-# brädets mitt medan partiet spelas, med en knappt märkbar höjdvaggning. Allt
-# drivs av _elapsed (dt-summerad) så inspelningen förblir deterministisk.
+# Spiralnedstigning: elevationen sjunker mjukt från nästan rakt ovanför till en
+# fin sidovy medan azimuten snurrar CAM_SPINS varv och bromsar in i sluts läget.
+# En smoothstep på speltiden gör att kameran landar exakt när partiet tar slut.
 func _update_camera() -> void:
-	var theta := deg_to_rad(CAM_SWEEP_DEG) * sin(TAU * _elapsed / CAM_PERIOD)
-	var y := CAM_Y + 0.03 * sin(TAU * _elapsed / 41.0)
-	var pos := Vector3(CAM_R * sin(theta), y, CAM_R * cos(theta))
-	_cam.look_at_from_position(pos, Vector3(0.0, 0.015, 0.0), Vector3.UP)
+	var t: float = clampf(_elapsed / _play_dur, 0.0, 1.0)
+	var s: float = smoothstep(0.0, 1.0, t)
+	var el := deg_to_rad(lerpf(CAM_EL_TOP, CAM_EL_END, s))
+	var az: float = TAU * CAM_SPINS * (1.0 - s)     # snurrar, landar på az=0 (sidovy)
+	var dist := lerpf(CAM_D_TOP, CAM_D_END, s)
+	var pos := CAM_CENTER + dist * Vector3(cos(el) * sin(az), sin(el), cos(el) * cos(az))
+	# kameraskak vid stora kaskader (deterministisk pseudo-slump på _frame)
+	if _shake_t < _shake_dur:
+		var kk: float = 1.0 - _shake_t / _shake_dur
+		var amp: float = _shake_amp * kk * kk
+		pos += Vector3(_nrand(_frame * 3 + 1), _nrand(_frame * 3 + 7), _nrand(_frame * 3 + 13)) * amp
+	_aim_camera(pos, CAM_CENTER, az)
+
+# Bygg kameraorienteringen för hand — look_at() rakt nedåt är degenererad (upp
+# blir parallell med blickriktningen). "right" härleds ur azimuten så att den
+# är väldefinierad även rakt ovanför, och bilden roterar mjukt genom spiralen.
+func _aim_camera(pos: Vector3, target: Vector3, az: float) -> void:
+	var backward := (pos - target).normalized()
+	var right := Vector3(cos(az), 0.0, -sin(az))
+	var up := backward.cross(right).normalized()
+	right = up.cross(backward).normalized()
+	_cam.global_transform = Transform3D(Basis(right, up, backward), pos)
+
+# deterministisk pseudo-slump i [-1,1] (fract-of-sin-hash) — ingen global RNG
+func _nrand(n: int) -> float:
+	var v: float = sin(float(n) * 12.9898 + 78.233) * 43758.5453
+	return (v - floor(v)) * 2.0 - 1.0
