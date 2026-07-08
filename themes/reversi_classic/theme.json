@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "theme_id": "reversi_classic",
+  "display_name": "Classic Reversi",
+  "palette": {
+    "primary":   ["#0B3418", "#124D24"],
+    "secondary": ["#080808", "#F2F2F0"],
+    "accent":    ["#1A1A1A", "#5A5A5A"],
+    "emissive":  ["#FFFFFF"],
+    "forbidden": ["#B22222"]
+  },
+  "materials": [
+    "felt_green", "frame_black", "piece_black", "piece_white"
+  ],
+  "silhouette_language": "A classic Reversi/Othello set: a flat green-felt 8x8 board with thin grid lines and a raised moulded black frame; the playing pieces are smooth round discs, one side glossy black, the other glossy white.",
+  "wear_range": [0.0, 0.15],
+  "detail_density_range": [0.0, 0.2],
+  "vision_style_brief": "A realistic classic Reversi board game: a deep green felt play surface with thin dark grid lines, a glossy moulded black plastic frame, and high-contrast glossy pieces -- pure black on one side, pure white on the other. Clean, product-like, modern tabletop look. NOT: fantasy stone/wood, warm candlelit mood, muddy low-contrast pieces.",
+  "anti_style": [
+    "warm fantasy wood or stone materials",
+    "muddy grey or low-contrast pieces (they must read pure black vs pure white)",
+    "saturated non-green board colors"
+  ],
+  "skybox_defaults": { "recipe": "soft_studio", "sun_elevation_deg": 60 }
+}

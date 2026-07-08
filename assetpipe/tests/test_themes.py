@@ -29,7 +29,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 THEMES_ROOT = REPO_ROOT / "themes"
 
 THEME_IDS = ["scifi_industrial", "fantasy_medieval", "lowpoly_stylized", "medieval_realistic",
-             "fantasy_tabletop"]
+             "fantasy_tabletop", "reversi_classic"]
 
 
 # ---------- the themes symlink ----------
