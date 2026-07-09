@@ -9,9 +9,9 @@ render_mode cull_back, specular_schlick_ggx;
 uniform float t = 0.0;
 uniform float amp = 0.05;
 uniform float island_r = 0.62;
-uniform vec3 deep : source_color = vec3(0.03, 0.11, 0.15);
-uniform vec3 shallow : source_color = vec3(0.10, 0.27, 0.30);
-uniform vec3 foam_col : source_color = vec3(0.82, 0.87, 0.90);
+uniform vec3 deep : source_color = vec3(0.015, 0.10, 0.14);
+uniform vec3 shallow : source_color = vec3(0.08, 0.32, 0.34);
+uniform vec3 foam_col : source_color = vec3(0.86, 0.90, 0.92);
 
 varying vec3 v_wpos;
 varying float v_h;
@@ -49,20 +49,25 @@ void fragment() {
 	vec3 n = normalize(cross(dFdx(v_wpos), dFdy(v_wpos)));
 	NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);
 
-	// vitkammar: skum på topparna, uppbrutet av brus så det inte blir jämna band
-	float fnoise = vnoise(v_wpos.xz * 6.0 + vec2(t * 0.15, -t * 0.1));
-	float crest = smoothstep(0.12, 0.55, v_h) * smoothstep(0.28, 0.62, fnoise);
-	// skumkrage där havet bryter mot ön
+	// vitkammar: skum på topparna, brutet av TVÅ brus-skalor (grova fläckar + fin
+	// textur) plus utdragna skumstråk, så det aldrig blir jämna vita band
+	float fbig = vnoise(v_wpos.xz * 4.0 + vec2(t * 0.12, -t * 0.08));
+	float ffine = vnoise(v_wpos.xz * 16.0 - vec2(t * 0.2, t * 0.15));
+	float streak = vnoise(v_wpos.xz * vec2(3.0, 22.0) + vec2(0.0, t * 0.5));
+	float capmask = smoothstep(0.30, 0.62, fbig) * (0.6 + 0.4 * ffine) * (0.5 + 0.5 * streak);
+	float crest = smoothstep(0.06, 0.5, v_h) * capmask;
+	// skumkrage där havet bryter mot ön (bruten så den inte blir en jämn ring)
 	float d = length(v_wpos.xz);
-	float shore = smoothstep(island_r + 0.24, island_r - 0.02, d)
-	            * smoothstep(island_r - 0.20, island_r - 0.02, d)
-	            * (0.65 + 0.35 * vnoise(v_wpos.xz * 10.0 + t * 0.6));
+	float shore = smoothstep(island_r + 0.26, island_r - 0.02, d)
+	            * smoothstep(island_r - 0.22, island_r - 0.02, d)
+	            * (0.5 + 0.5 * vnoise(v_wpos.xz * 12.0 + t * 0.6));
 	float foam = clamp(max(crest, shore), 0.0, 1.0);
 
-	vec3 col = mix(deep, shallow, clamp(v_h * 0.5 + 0.5, 0.0, 1.0));
+	// djupare i vågdalarna, ljusare mot topparna → mer djup i havet
+	vec3 col = mix(deep, shallow, clamp(v_h * 0.6 + 0.45, 0.0, 1.0));
 	col = mix(col, foam_col, foam);
 	ALBEDO = col;
-	ROUGHNESS = mix(0.14, 0.6, foam);
+	ROUGHNESS = mix(0.12, 0.65, foam);
 	METALLIC = 0.0;
-	SPECULAR = 0.45;
+	SPECULAR = 0.5;
 }

@@ -614,8 +614,8 @@ func _build_stage() -> void:
 
 	# Dagsljus-sol: ljus, en aning varm, mjuka skuggor uppifrån-sidan.
 	var key := DirectionalLight3D.new()
-	key.light_color = Color(1.0, 0.96, 0.88)
-	key.light_energy = 1.5                 # dämpad så marmorns ådring/flöjlar syns (ej vitutfrätt)
+	key.light_color = Color(1.0, 0.95, 0.85)   # varmt dagsljus
+	key.light_energy = 1.7                 # ljust men marmorns ådring/flöjlar syns
 	key.light_angular_distance = 2.0
 	key.shadow_enabled = true
 	key.rotation = Vector3(deg_to_rad(-52.0), deg_to_rad(-38.0), 0.0)
@@ -670,32 +670,37 @@ func _build_rock_island() -> void:
 	var mat := ShaderMaterial.new()
 	mat.shader = load("res://rock.gdshader")
 	mat.set_shader_parameter("waterline", SEA_Y)
-	# huvudklacken: tillplattad sfär, topp ~y=0 (piedestalens fot), bred fot i havet
+	# huvudklacken: bred, flack, kraftigt förskjuten sfär (skrovlig utåtklack),
+	# topp ~y=0 (piedestalens fot), bred fot ned i havet
 	var main := MeshInstance3D.new()
 	var sm := SphereMesh.new()
-	sm.radius = ISLAND_R
-	sm.height = ISLAND_R * 1.5
-	sm.radial_segments = 64
-	sm.rings = 32
+	sm.radius = ISLAND_R * 1.15
+	sm.height = ISLAND_R * 1.6
+	sm.radial_segments = 96
+	sm.rings = 48
 	main.mesh = sm
 	main.material_override = mat
-	main.scale = Vector3(1.0, 0.62, 1.0)
-	main.position = Vector3(0.0, -0.30, 0.0)
+	main.scale = Vector3(1.0, 0.52, 1.0)
+	main.position = Vector3(0.0, -0.28, 0.0)
 	add_child(main)
-	# några mindre klippblock runt foten för en taggig silhuett
-	for i in 5:
-		var a := TAU * float(i) / 5.0 + 0.5
-		var r := ISLAND_R * (0.7 + 0.25 * absf(_nrand(i * 5 + 2)))
+	# taggiga klippblock runt foten — några sticker upp som spetsar, andra ligger
+	# vid vattenlinjen; varierad storlek/höjd för en ojämn skärgårdssilhuett
+	for i in 9:
+		var a := TAU * float(i) / 9.0 + 0.4 * _nrand(i * 5 + 1)
+		var r := ISLAND_R * (0.75 + 0.35 * absf(_nrand(i * 5 + 2)))
 		var chunk := MeshInstance3D.new()
 		var cs := SphereMesh.new()
-		cs.radius = ISLAND_R * (0.28 + 0.12 * absf(_nrand(i * 5 + 7)))
-		cs.height = cs.radius * 1.8
-		cs.radial_segments = 32
-		cs.rings = 16
+		var cr := ISLAND_R * (0.3 + 0.22 * absf(_nrand(i * 5 + 7)))
+		cs.radius = cr
+		cs.height = cr * (1.6 + 1.4 * absf(_nrand(i * 5 + 13)))   # några spetsiga
+		cs.radial_segments = 40
+		cs.rings = 24
 		chunk.mesh = cs
 		chunk.material_override = mat
-		chunk.scale = Vector3(1.0, 0.7, 1.0)
-		chunk.position = Vector3(r * sin(a), SEA_Y + 0.02 + 0.05 * _nrand(i), r * cos(a))
+		var peak := 0.5 + 0.5 * absf(_nrand(i * 5 + 3))
+		chunk.scale = Vector3(1.0, peak, 1.0)
+		chunk.position = Vector3(r * sin(a), SEA_Y - 0.02 + 0.10 * absf(_nrand(i)), r * cos(a))
+		chunk.rotation.y = _nrand(i * 5 + 9) * PI
 		add_child(chunk)
 
 # EN central marmorpelare som piedestal: brädet vilar på kapitälet (brädet är
@@ -717,24 +722,33 @@ func _build_pedestal() -> void:
 # avlägsen kustlinje: några låga, mörka, disiga uddar nära horisonten (fog gör
 # dem atmosfäriskt bleka), utspridda på fjärran sidorna som i referensen
 func _build_coast() -> void:
-	var pts := [
-		[16.0, -60.0, 1.1, 5.0], [20.0, -110.0, 1.6, 8.0],
-		[18.0, 150.0, 0.9, 6.0], [22.0, 120.0, 1.3, 7.0],
+	# avlägsna kullar/uddar i lager: en högre bakre ås + lägre främre kullar,
+	# atmosfäriskt bleka (ljusare = längre bort) som i referensen
+	var ridges := [
+		# dist, vinkel°, höjd, bredd, blekhet(0 mörkast..1 ljusast)
+		[24.0, -70.0, 2.4, 16.0, 0.85], [17.0, -95.0, 1.2, 10.0, 0.55],
+		[26.0, 120.0, 2.0, 18.0, 0.9], [19.0, 150.0, 1.0, 9.0, 0.5],
+		[30.0, 40.0, 2.8, 22.0, 0.95],
 	]
-	for p in pts:
-		var dist: float = p[0]
-		var ang := deg_to_rad(p[1])
-		var hgt: float = p[2]
-		var wid: float = p[3]
+	for r in ridges:
+		var dist: float = r[0]
+		var ang := deg_to_rad(r[1])
+		var hgt: float = r[2]
+		var wid: float = r[3]
+		var haze: float = r[4]
 		var m := MeshInstance3D.new()
+		# tillplattad prismalik kulle (box med avsmalnande topp via skalning)
 		var bx := BoxMesh.new()
-		bx.size = Vector3(wid, hgt, wid * 0.5)
+		bx.size = Vector3(wid, hgt, wid * 0.4)
 		m.mesh = bx
 		var mm := StandardMaterial3D.new()
-		mm.albedo_color = Color(0.34, 0.40, 0.47)   # disig mörk udde
+		# ju längre bort desto blekare/blåare (luftperspektiv)
+		var col := Color(0.42, 0.50, 0.58).lerp(Color(0.74, 0.79, 0.84), haze)
+		mm.albedo_color = col
 		mm.roughness = 1.0
 		m.material_override = mm
-		m.position = Vector3(dist * sin(ang), SEA_Y + hgt * 0.5 - 0.1, dist * cos(ang))
+		m.position = Vector3(dist * sin(ang), SEA_Y + hgt * 0.5 - 0.15, dist * cos(ang))
+		m.rotation.y = ang
 		add_child(m)
 
 # Spiralnedstigning: elevationen sjunker mjukt från nästan rakt ovanför till en
