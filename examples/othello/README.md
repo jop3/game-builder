@@ -40,7 +40,7 @@ game/
                     animates the flip cascade, flies a cinematic spiral camera,
                     fires drama FX on big cascades, records deterministically
   mux_audio.py    overlays the procedural soundtrack onto a recorded mp4 (headless has no audio)
-  sea.gdshader    deterministic sea shader (Gerstner-ish waves, whitecaps, shoreline foam)
+  sea.gdshader    deterministic ocean: Gerstner waves + Fresnel sky-reflection + fold-foam + ripple normals
   sky.gdshader    deterministic sky shader (drifting fbm clouds + lightning flash uniform)
   rock.gdshader   craggy vertex-displaced wet-rock shader (fbm, derivative normals)
   assets/board.glb  the validated reversi_classic green-felt board (black frame)
@@ -90,6 +90,28 @@ bright pixels easily mistaken for a disc. Two habits stop that recurring:
 The root cause here was ordering: `_build_pedestal()` ran before `_load_assets()`,
 so the column height was a hardcoded guess instead of measured against the board.
 It now builds *after* the board loads and scales to `_board_bottom_y`.
+
+### The ocean (`sea.gdshader`)
+
+Not a bespoke sum-of-sines — the standard CG ocean recipe (GPU Gems 1, ch. 1):
+
+- **Gerstner (trochoidal) waves** — each vertex orbits in a circle (horizontal +
+  vertical), summed over 4 waves of different length/direction/steepness, giving
+  sharp crests and rounded troughs with a correct *analytic* normal (no
+  derivative hack needed for the coarse waves).
+- **Fresnel** — water reflects the sky at grazing angles; a Schlick term
+  (F0≈0.02) blends a sky tint into the albedo so the horizon reads bright and
+  the near water deep — the single biggest "reads as water" cue.
+- **Foam from the wave fold (Jacobian)** — `Σ Q·k·A·sin(...)`; where crests
+  pinch past vertical the surface would self-fold, which is exactly where real
+  water froths. Plus a broken shoreline foam ring where sea meets rock.
+- **Ripple normals** — per-fragment, the normal is perturbed by the gradient of
+  a scrolling value-noise, adding sub-tessellation surface texture and letting
+  the key light throw sun-glitter sparkle across the crests.
+
+All animated by the `t = _elapsed` uniform (never `TIME`) so it stays
+deterministic. Godot gotcha: `TAU`/`PI` are built-in shader constants — don't
+redefine them (use your own `TWO_PI`), or the shader fails to compile.
 
 ## How the graphics were produced (reproducible)
 
