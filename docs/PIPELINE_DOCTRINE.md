@@ -67,6 +67,32 @@ iteration cap — it does not pause for a human. It terminates the asset `best_e
 a machine-written `diagnosis.md` listing every persisted defect, and the batch continues.
 The human reads diagnoses *after* the batch, in one pass, not one asset at a time.
 
+## 3.5 The cheap eye comes first — iteration medium doctrine
+
+When work converges on an *expensive* artifact (a 30-minute film render, a full
+batch, a long bake), the artifact must not double as the microscope. Build the
+**cheap deterministic probe first**: a seconds-fast, single-sample view of the
+same pixels (the Othello example's `--still` mode fast-forwards the dt-summed
+clock and captures one frame, bit-identical to the corresponding film frame).
+The 2026-07-09 history is the measurement: sessions that verified through full
+recordings ran ~6 looks/day; the session that built the probe first ran ~12
+looks in two hours and shipped more per hour (`docs/ITERATION_RETRO.md` has
+the commit-level evidence).
+
+Three disciplines ride along with the probe:
+
+- **Arithmetic before tuning.** If an effect "doesn't show", first check it is
+  *reachable* (threshold vs theoretical max, amplitude vs object radius). Two
+  render-cycles were once spent tuning whitecaps whose foam threshold sat
+  *above* the wave set's maximum possible fold — no parameter value could ever
+  have worked.
+- **Artifact differencing.** An artifact identical across parameter changes is
+  not coming from the subsystem being edited — stop tuning, switch suspects.
+- **Crop-zoom before diagnosing.** Visually similar defects (facet shading,
+  specular veil, UV pole pinch) have different root causes that only separate
+  at 4× crop. Name the root cause before writing the fix; a fix without a
+  cause-name is a tweak, and tweaks don't transfer to the next asset.
+
 ## 4. The one honest boundary: art-direction cohere is not automatable
 
 "Zero human review" (§1.1) is true and correct **per asset, for objective quality** —

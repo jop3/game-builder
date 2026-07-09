@@ -56,6 +56,10 @@ def main() -> None:
     for p in sorted(glob.glob(os.path.join(args.dir, "sfx_flip_*.wav"))):
         a, _ = _read_wav(p)
         flips.append(a)
+    surfs = []
+    for p in sorted(glob.glob(os.path.join(args.dir, "sfx_surf_*.wav"))):
+        a, _ = _read_wav(p)
+        surfs.append(a)
 
     # masterns längd = antal renderade bildrutor / fps (+ svans)
     nframes = len(glob.glob(os.path.join(args.dir, "frame_*.png")))
@@ -65,6 +69,14 @@ def main() -> None:
     def mix(at: int, clip: np.ndarray, gain: float) -> None:
         end = min(at + len(clip), total)
         master[at:end] += clip[: end - at] * gain
+
+    # havsbrus-loopen (sömlös skarv genereras i audio.gd) kaklas över hela
+    # spåret som ambient botten
+    loop_path = os.path.join(args.dir, "sfx_sea_loop.wav")
+    if os.path.exists(loop_path):
+        loop, _ = _read_wav(loop_path)
+        for at in range(0, total, len(loop)):
+            mix(at, loop, 0.35)
 
     for ln in lines[1:]:
         if not ln.strip():
@@ -79,6 +91,8 @@ def main() -> None:
             mix(at, sfx["win"], 0.8)
         elif kind == "thunder" and "thunder" in sfx:
             mix(at, sfx["thunder"], 0.85)
+        elif kind == "surf" and surfs:
+            mix(at, surfs[int(idx_s) % len(surfs)], 0.40)
 
     # mjuk kompression av toppar + liten headroom
     peak = float(np.max(np.abs(master))) or 1.0

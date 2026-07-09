@@ -102,11 +102,30 @@ var _sfx_place: AudioStreamWAV
 var _sfx_flip := []         # några tonhöjdsvarianter
 var _sfx_win: AudioStreamWAV
 var _sfx_thunder: AudioStreamWAV
+var _sfx_surf := []         # bränningsskvätt, några brusfärger
 var _p_place: AudioStreamPlayer
 var _p_flip: AudioStreamPlayer
 var _p_win: AudioStreamPlayer
 var _p_thunder: AudioStreamPlayer
+var _p_surf: AudioStreamPlayer
+var _p_sea: AudioStreamPlayer    # loopande havsbrus (ambient)
 var _events := []           # [{f, kind, idx}] för muxern vid inspelning
+
+# --- bränningar (vågkrasch mot klippan) ---
+# SPEGEL av sea.gdshader:s våguppsättning — ändras den där MÅSTE den ändras här
+# (skvätten hamnar annars där vågorna INTE slår). Foldsumman Σ Q·k·A·sin(...)
+# är samma uttryck som shaderns skum-fold, utvärderad i GDScript på strandringen.
+const _W_DIR := [Vector2(1.0, 0.35), Vector2(-0.6, 1.0), Vector2(0.9, -0.4), Vector2(0.2, 1.0)]
+const _W_LEN := [2.4, 1.25, 0.70, 0.45]
+const _W_AMP := [0.042, 0.028, 0.016, 0.009]
+const _W_Q := [0.50, 0.62, 0.72, 0.80]
+const _W_SPD := [0.9, 1.3, 1.8, 2.3]
+const SURF_CHECK_T := 0.30   # s mellan avsökningar av strandringen
+const SURF_THRESH := 0.22    # foldsumma som räknas som "vågen slår" (teoretiskt max ≈ 0.35)
+const SURF_COOLDOWN := 1.6   # s per sektor mellan skurar
+var _surf_acc := 0.0
+var _surf_cool := {}         # sektor(int) -> tid för senaste skur
+var _surf_n := 0
 
 # --- audit ---
 var _audit_mode := false
@@ -245,10 +264,21 @@ func _build_audio() -> void:
 		_sfx_flip.append(Audio.make_flip(k))
 	_sfx_win = Audio.make_win()
 	_sfx_thunder = Audio.make_thunder()
+	for k in 3:
+		_sfx_surf.append(Audio.make_surf(k))
 	_p_place = AudioStreamPlayer.new(); add_child(_p_place)
 	_p_flip = AudioStreamPlayer.new(); _p_flip.max_polyphony = 8; add_child(_p_flip)
 	_p_win = AudioStreamPlayer.new(); add_child(_p_win)
 	_p_thunder = AudioStreamPlayer.new(); _p_thunder.max_polyphony = 4; add_child(_p_thunder)
+	_p_surf = AudioStreamPlayer.new(); _p_surf.max_polyphony = 4
+	_p_surf.volume_db = -7.0; add_child(_p_surf)
+	# loopande havsbrus under allt (interaktivt; i inspelning lägger muxern på det)
+	_p_sea = AudioStreamPlayer.new()
+	_p_sea.stream = Audio.make_sea_loop()
+	_p_sea.volume_db = -12.0
+	add_child(_p_sea)
+	if _record_dir.is_empty() and not _audit_mode and _still_t < 0.0:
+		_p_sea.play()
 	# Vid inspelning: spara effekterna som .wav så muxern kan lägga dem på spåret
 	# (headless-drivern spelar inget). Interaktivt: spela direkt i _sfx().
 	if not _record_dir.is_empty():
@@ -257,6 +287,9 @@ func _build_audio() -> void:
 		_sfx_thunder.save_to_wav("%s/sfx_thunder.wav" % _record_dir)
 		for k in _sfx_flip.size():
 			_sfx_flip[k].save_to_wav("%s/sfx_flip_%d.wav" % [_record_dir, k])
+		for k in _sfx_surf.size():
+			_sfx_surf[k].save_to_wav("%s/sfx_surf_%d.wav" % [_record_dir, k])
+		(_p_sea.stream as AudioStreamWAV).save_to_wav("%s/sfx_sea_loop.wav" % _record_dir)
 
 # emittera en ljudhändelse: logga (för muxern) + spela direkt om vi inte spelar in.
 # frame_offset låter åskan följa blixten med en liten fördröjning i inspelningen.
@@ -273,6 +306,8 @@ func _sfx(kind: String, idx: int = 0, frame_offset: int = 0) -> void:
 			_p_win.stream = _sfx_win; _p_win.play()
 		"thunder":
 			_p_thunder.stream = _sfx_thunder; _p_thunder.play()
+		"surf":
+			_p_surf.stream = _sfx_surf[idx % _sfx_surf.size()]; _p_surf.play()
 
 # ---------------------------------------------------------------- drama ----
 func _build_fx() -> void:
@@ -341,14 +376,84 @@ func _spawn_puff(p: Vector3, seedv: int) -> void:
 	_puffs.append({"n": mi, "m": m, "t": 0.0, "dur": 0.55 + 0.3 * absf(_nrand(seedv)),
 		"vel": vel, "col": Color(0.9, 0.92, 0.96), "a0": 0.65, "grow": 2.2})
 
-# ett vitt skumstänk vid klippkanten som slungas upp/utåt (fejkad krossande våg)
-func _spawn_spray(seedv: int) -> void:
-	# lågt vitt skum vid klippans vattenlinje — små fläckar som poppar och tonas
-	# ut nära vattnet (ALDRIG upp längs pelaren), så piedestalen aldrig döljs
-	var a: float = _nrand(seedv * 7 + 3) * PI
-	var rr: float = ISLAND_R * (0.94 + 0.12 * absf(_nrand(seedv * 7 + 11)))
+# --- bränningar: vågkrascher mot klippan, styrda av den RIKTIGA vågfolden ---
+
+# samma foldsumma som sea.gdshader:s skumterm (Σ Q·k·A·sin), utvärderad i en
+# punkt på havsytan vid tiden tt — så skvätten kommer exakt där och när
+# shaderns skum toppar. Deterministiskt (bara _elapsed och konstanter).
+func _wave_fold(p: Vector2, tt: float) -> float:
+	var fold := 0.0
+	for i in 4:
+		var d: Vector2 = (_W_DIR[i] as Vector2).normalized()
+		var k: float = TAU / _W_LEN[i]
+		fold += _W_Q[i] * k * _W_AMP[i] * sin(k * d.dot(p) + tt * _W_SPD[i])
+	return fold
+
+# kameraspiralens azimut vid aktuell speltid (samma formel som _update_camera)
+func _cam_az() -> float:
+	var t: float = clampf(_elapsed / _play_dur, 0.0, 1.0)
+	return TAU * CAM_SPINS * (1.0 - smoothstep(0.0, 1.0, t))
+
+# avsök strandringen: var slår vågen just nu? En skur per sektor med cooldown,
+# skalad efter hur hårt folden slår över tröskeln. Bland punkterna ÖVER
+# tröskeln föredras kamerasidan (cos(a-az)-bonus) — vågen slår ändå där folden
+# säger, men filmen ska få se det, inte öns baksida.
+func _check_surf() -> void:
+	var az := _cam_az()
+	var best_a := 0.0
+	var best_f := -99.0
+	var best_score := -99.0
+	for k in 24:
+		var a := TAU * float(k) / 24.0
+		var p := Vector2(sin(a), cos(a)) * (ISLAND_R + 0.05)
+		var f := _wave_fold(p, _elapsed)
+		if f < SURF_THRESH:
+			continue
+		var score := f + 0.08 * cos(a - az)
+		if score > best_score:
+			best_score = score; best_f = f; best_a = a
+	if best_f < SURF_THRESH:
+		return
+	var sector := int(floor(best_a / TAU * 8.0)) % 8
+	if _surf_cool.has(sector) and _elapsed - _surf_cool[sector] < SURF_COOLDOWN:
+		return
+	_surf_cool[sector] = _elapsed
+	_spawn_surf_burst(best_a, clampf((best_f - SURF_THRESH) / 0.08, 0.0, 1.0))
+
+# ett vitt krasch-skvätt vid klippkanten: en handfull billboard-puffar som
+# slungas lågt upp/utåt och tonar snabbt — ALDRIG högt (piedestalen får inte
+# döljas; det var därför den gamla spray:en togs bort). + ett "surf"-ljud.
+func _spawn_surf_burst(a: float, f: float) -> void:
+	_surf_n += 1
+	if _still_t >= 0.0:
+		# look-dev-hjälp: hitta en filmvärd skur att rendera en stillbild strax efter
+		print("SURF_BURST t=%.2f a=%.2f f=%.2f" % [_elapsed, a, f])
+	_sfx("surf", _surf_n)
+	# TVÅ lager: en tät VIT PELARE av stänk rakt vid nedslaget (referensens
+	# krasch är en sammanhängande kaskad, inte utspridda blobbar) + en solfjäder
+	# av små droppar i båge (riktig gravitation). Glesa, svaga puffar läste
+	# bara som dimfläckar mot klippan.
+	var core := 5 + int(round(3.0 * f))
+	for i in core:
+		var sv := _surf_n * 31 + i * 7
+		var rr: float = ISLAND_R * (1.00 + 0.06 * absf(_nrand(sv + 2)))
+		var p := Vector3(rr * sin(a), SEA_Y + 0.012 + 0.018 * float(i), rr * cos(a))
+		_surf_puff(p, Vector3(sin(a) * 0.05, (0.26 + 0.10 * absf(_nrand(sv + 3))) * (0.7 + 0.3 * f), cos(a) * 0.05),
+			0.075, 1.0, 0.50 + 0.20 * absf(_nrand(sv + 5)), 2.4, sv)
+	var drops := 10 + int(round(6.0 * f))
+	for i in drops:
+		var sv := _surf_n * 53 + i * 11
+		var aa: float = a + 0.22 * _nrand(sv + 1)
+		var rr2: float = ISLAND_R * (0.98 + 0.18 * absf(_nrand(sv + 2)))
+		var p2 := Vector3(rr2 * sin(aa), SEA_Y + 0.012, rr2 * cos(aa))
+		var up: float = (0.18 + 0.16 * absf(_nrand(sv + 3))) * (0.65 + 0.35 * f)
+		var out: float = 0.07 + 0.11 * absf(_nrand(sv + 4))
+		_surf_puff(p2, Vector3(sin(aa) * out, up, cos(aa) * out),
+			0.040, 0.95, 0.40 + 0.25 * absf(_nrand(sv + 5)), 1.9, sv)
+
+func _surf_puff(p: Vector3, vel: Vector3, size: float, a0: float, dur: float, grow: float, _sv: int) -> void:
 	var mi := MeshInstance3D.new()
-	var q := QuadMesh.new(); q.size = Vector2(0.045, 0.045)
+	var q := QuadMesh.new(); q.size = Vector2(size, size)
 	mi.mesh = q
 	var m := StandardMaterial3D.new()
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -356,13 +461,11 @@ func _spawn_spray(seedv: int) -> void:
 	m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
 	m.albedo_texture = _puff_tex
 	mi.material_override = m
-	mi.position = Vector3(rr * sin(a), SEA_Y + 0.01, rr * cos(a))
+	mi.position = p
 	add_child(mi)
-	var up: float = 0.05 + 0.05 * absf(_nrand(seedv * 7 + 17))    # bara ett litet lyft
-	var out: float = 0.05 + 0.05 * absf(_nrand(seedv * 7 + 23))
-	var vel := Vector3(sin(a) * out, up, cos(a) * out)
-	_puffs.append({"n": mi, "m": m, "t": 0.0, "dur": 0.30 + 0.14 * absf(_nrand(seedv * 7 + 5)),
-		"vel": vel, "col": Color(0.78, 0.82, 0.86), "a0": 0.55, "grow": 1.4})
+	_puffs.append({"n": mi, "m": m, "t": 0.0, "dur": dur,
+		"vel": vel, "col": Color(0.96, 0.98, 1.0), "a0": a0, "grow": grow,
+		"grav": 0.55})
 
 # animera alla dramaeffekter för hand (deterministiskt, drivet av dt)
 func _update_fx(dt: float) -> void:
@@ -389,7 +492,7 @@ func _update_fx(dt: float) -> void:
 		if k3 >= 1.0:
 			pf.n.queue_free()
 			continue
-		pf.vel.y -= 0.04 * dt
+		pf.vel.y -= pf.get("grav", 0.04) * dt
 		var mi: MeshInstance3D = pf.n
 		mi.position += pf.vel * dt
 		var sc: float = 1.0 + pf.grow * k3
@@ -399,8 +502,6 @@ func _update_fx(dt: float) -> void:
 		mm.albedo_color = Color(bc.r, bc.g, bc.b, pf.a0 * (1.0 - k3) * (1.0 - k3))
 		alive.append(pf)
 	_puffs = alive
-	# skummet vid vattenlinjen sköts av havs-shaderns skumkrage (billboard-stänk
-	# skymde piedestalen). _spawn_spray finns kvar men anropas inte.
 	# blixt: en snabb dubbelblink-envelope som lyser upp scen + himmel
 	if _bolt_t < _bolt_dur:
 		_bolt_t += dt
@@ -578,6 +679,10 @@ func _place_start() -> void:
 # --------------------------------------------------------- animation ------
 func _step(dt: float) -> void:
 	_update_fx(dt)
+	_surf_acc += dt
+	if _surf_acc >= SURF_CHECK_T:
+		_surf_acc -= SURF_CHECK_T
+		_check_surf()
 	if _bolt_i < _bolt_times.size() and _elapsed >= _bolt_times[_bolt_i]:
 		_bolt_i += 1
 		_trigger_lightning()
@@ -702,7 +807,7 @@ func _build_stage() -> void:
 	e.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	e.ambient_light_sky_contribution = 0.8
 	e.ambient_light_color = Color(0.60, 0.68, 0.80)
-	e.ambient_light_energy = 0.38          # dagsljus men ej utfrätt
+	e.ambient_light_energy = 0.34          # något dovare ambient → solsidan får modellera formen
 	e.tonemap_mode = Environment.TONE_MAPPER_FILMIC   # punchigare färg än AgX (havet blir blågrönt)
 	e.tonemap_white = 1.6
 	e.fog_enabled = true
@@ -716,7 +821,7 @@ func _build_stage() -> void:
 	# Dagsljus-sol: ljus, en aning varm, mjuka skuggor uppifrån-sidan.
 	var key := DirectionalLight3D.new()
 	key.light_color = Color(1.0, 0.95, 0.85)   # varmt dagsljus
-	key.light_energy = 1.7                 # ljust men marmorns ådring/flöjlar syns
+	key.light_energy = 2.0                 # starkare sol → mer kontrast (svart läser ändå svart)
 	key.light_angular_distance = 2.0
 	key.shadow_enabled = true
 	key.rotation = Vector3(deg_to_rad(-52.0), deg_to_rad(-38.0), 0.0)

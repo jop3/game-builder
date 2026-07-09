@@ -74,6 +74,55 @@ static func make_thunder() -> AudioStreamWAV:
 		s[i] = clampf((prev * 2.6 + sub) * env * 0.8, -1.0, 1.0)
 	return _wav(s)
 
+# Bränningsskvätt: bandpassat brus med snabb attack och medellång svans —
+# ett "SCHWOSCH" när en våg slår mot klippan. seedv varierar brusfärgen.
+static func make_surf(seedv: int) -> AudioStreamWAV:
+	var dur := 1.1
+	var n := int(RATE * dur)
+	var s := PackedFloat32Array(); s.resize(n)
+	var lp := 0.0
+	var lp2 := 0.0
+	var seedf := 12.9898 + 0.37 * float(seedv)
+	for i in n:
+		var t := float(i) / RATE
+		var env: float = clampf(t / 0.05, 0.0, 1.0) * exp(-t * 3.4)
+		var hv: float = sin(float(i) * seedf) * 43758.5453
+		var white: float = (hv - floor(hv)) * 2.0 - 1.0
+		lp = lp + 0.30 * (white - lp)                # snabb lågpass
+		lp2 = lp2 + 0.045 * (white - lp2)            # långsam lågpass
+		s[i] = clampf((lp - lp2) * 2.2 * env * 0.6, -1.0, 1.0)   # bandet = skvättet
+	return _wav(s)
+
+# Havsbrus-loop: två lågpassade bruslager med långsam dyning (hela LFO-cykler
+# per loop) och korsfadad skarv → sömlös bakgrund under hela partiet.
+static func make_sea_loop() -> AudioStreamWAV:
+	var dur := 6.0
+	var fade := int(RATE * 0.30)
+	var n := int(RATE * dur)
+	var tmp := PackedFloat32Array(); tmp.resize(n + fade)
+	var lp := 0.0
+	var lp2 := 0.0
+	for i in n + fade:
+		var t := float(i) / RATE
+		var hv: float = sin(float(i) * 7.4321) * 43758.5453
+		var white: float = (hv - floor(hv)) * 2.0 - 1.0
+		lp = lp + 0.12 * (white - lp)
+		lp2 = lp2 + 0.02 * (white - lp2)
+		# dyning: 2 + 3 hela cykler per loop → skarven är fasren
+		var swell: float = 0.55 + 0.30 * sin(TAU * 2.0 * t / dur) + 0.15 * sin(TAU * 3.0 * t / dur + 1.3)
+		tmp[i] = (lp * 0.7 + lp2 * 1.6) * swell * 0.5
+	var s := PackedFloat32Array(); s.resize(n)
+	for i in n:
+		s[i] = tmp[i]
+	for i in fade:   # korsfada svansen in i huvudet → inget klick vid loopning
+		var k := float(i) / float(fade)
+		s[i] = tmp[i] * k + tmp[n + i] * (1.0 - k)
+	var st := _wav(s)
+	st.loop_mode = AudioStreamWAV.LOOP_FORWARD
+	st.loop_begin = 0
+	st.loop_end = n
+	return st
+
 # Mjuk stigande klocka (C–E–G–C arpeggio) med klockliknande övertoner.
 static func make_win() -> AudioStreamWAV:
 	var dur := 1.5

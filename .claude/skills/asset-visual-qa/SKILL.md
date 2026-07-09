@@ -1,6 +1,6 @@
 ---
 name: asset-visual-qa
-description: Autonomous visual QA for 3D game assets - deterministic headless Blender render harnesses, scripted image analytics, glTF structural validation, and vision-model inspection with structured rubrics. Use when rendering turntables/debug passes headlessly, building contact sheets for model inspection, writing NumPy pixel checks (black textures, backface detection, tiling seams, clipping), validating glTF files programmatically, designing vision-model QA rubrics with forced structured output, or hardening a render-inspect-fix loop against false positives. Triggers on: turntable render, headless render, visual verification, vision QA rubric, render inspection, image diff checks, glTF validation, contact sheet. Original skill authored for this repo's asset pipeline (docs/specs/asset-pipeline.md §13.5-§15).
+description: Autonomous visual QA for 3D game assets - deterministic headless Blender render harnesses, scripted image analytics, glTF structural validation, vision-model inspection with structured rubrics, and fast look-dev probes for live engine scenes. Use when rendering turntables/debug passes headlessly, building contact sheets for model inspection, writing NumPy pixel checks (black textures, backface detection, tiling seams, clipping), validating glTF files programmatically, designing vision-model QA rubrics with forced structured output, hardening a render-inspect-fix loop against false positives, or iterating on shaders/scenes whose full render is expensive (film recordings, long bakes). Triggers on: turntable render, headless render, visual verification, vision QA rubric, render inspection, image diff checks, glTF validation, contact sheet, look-dev, still probe, shader iteration. Original skill authored for this repo's asset pipeline (docs/specs/asset-pipeline.md §13.5-§15).
 ---
 
 # Asset Visual QA (Headless Renders + Scripted Analytics + Vision Rubrics)
@@ -234,6 +234,40 @@ Scripted checks are the floor (objective defects can't slip past), the vision mo
 ceiling (perceptual defects a script can't express). Order by cost: pixel checks (free) →
 static/glTF checks (cheap) → vision (API cost) — and short-circuit: never spend a vision
 call on an asset that already failed static checks; fix loops re-enter at the static gate.
+
+## Look-dev probes for live engine scenes (when the real render is expensive)
+
+When the deliverable is an expensive render (a 30-minute software-Vulkan film, a
+long bake), the deliverable must not double as the microscope. Build a **probe
+mode** into the scene first — it converts a ~30-minute look into a ~40-second
+look, and the 2026-07-09 Othello sessions measured that as the difference
+between ~6 looks/day and ~12 looks in two hours (`docs/ITERATION_RETRO.md`).
+
+- **Pattern**: `--still=SECONDS --out=x.png` — fast-forward the *deterministic*
+  dt-summed clock through the simulation WITHOUT rendering per step, set all
+  time uniforms, render ONE frame, save, quit. Determinism (manual clock, no
+  `TIME`, no wall-clock) is what makes the probe frame bit-identical to the
+  corresponding frame of the full render — otherwise the probe lies.
+- **Warm-up frames before capture**: ReflectionProbe (UPDATE_ONCE), sky-radiance
+  ambient, and shader compilation need ~30 rendered frames before the first
+  capture, or surfaces lit by sky ambient render near-black and you will chase
+  a lighting bug that doesn't exist.
+- **Probe events, not just times**: for transient effects (particle-like bursts),
+  have the probe mode print event timestamps (`BURST t=...`) during fast-forward,
+  then re-render a still at `t_event + 0.3` to actually see one.
+- **Crop-zoom before diagnosing**: extract a 4× crop of the suspect region
+  (`ffmpeg -vf "crop=...,scale=...:flags=neighbor"`). Visually-similar defects
+  (giant facet shading, broad specular veil, sphere-pole UV pinch) separate only
+  at crop scale, and each needs a different fix.
+- **Artifact differencing across versions**: an artifact IDENTICAL across your
+  parameter changes is not produced by the subsystem you are editing. Stop
+  tuning it; switch suspects. (A "spray mist" on rocks survived three particle
+  retunes unchanged — it was the rock material's specular reflecting the probe.)
+- **Reachability arithmetic before tuning**: when an effect doesn't show,
+  compute whether it *can* — e.g. Gerstner fold-foam maxes at `Σ Q·k·A`; if the
+  foam smoothstep's lower edge sits above that sum, no amount of tuning will
+  ever produce a whitecap. Two full render-cycles were once spent tuning
+  exactly that dead knob.
 
 ## Pitfall checklist
 

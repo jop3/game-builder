@@ -75,6 +75,28 @@ improvements:
    changed from boxes (read as floating slabs) to unshaded haze-colored hill
    silhouettes, fill light 0.40→0.22.
 
+**Same session, part 2 (kvällen):**
+
+6. **Crashing surf**: `_wave_fold()` mirrors the sea shader's Gerstner fold sum
+   in GDScript (the constants are DUPLICATED — change both!), scans the shore
+   ring every 0.3 s, and fires a deterministic spray burst (dense white core
+   column + droplet fan, real gravity, low height cap so the pedestal is never
+   occluded) where the fold peaks. Among spots over the threshold the selection
+   prefers the camera side (`+0.08·cos(a−az)` bonus). In `--still` mode each
+   burst prints `SURF_BURST t=… a=… f=…` so you can render a still just after a
+   strong one.
+7. **Ocean audio**: `make_surf()` (band-passed noise whoosh, 3 variants, one per
+   burst via the event log) + `make_sea_loop()` (seamless 6 s low noise swell,
+   loops live in-game, tiled across the whole track by `mux_audio.py`).
+8. **Sculpted cumulus**: sky shader samples the cloud field offset toward
+   `LIGHT0_DIRECTION` — lit tops vs shadowed bases instead of a flat density
+   gradient. Sharper cauliflower coverage edge.
+9. **Contrast**: key 1.7→2.0, ambient 0.38→0.34, lingering wind-lace foam trails.
+10. **Process docs**: `docs/ITERATION_RETRO.md` (commit-history analysis: why the
+    look-dev-probe session out-iterated the record-every-change sessions ~50× per
+    look) + doctrine §3.5 + look-dev sections in the `asset-visual-qa` skill and
+    Snittet's `spelbygge`/`godot-shaders` skills.
+
 Progression stills for this pass live only in the session scratchpad; the
 committed evidence is the new `othello_game.mp4`.
 

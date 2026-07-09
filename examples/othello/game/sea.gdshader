@@ -116,6 +116,10 @@ void fragment() {
 	float capfoam = smoothstep(0.18, 0.34, v_fold) * smoothstep(0.40, 0.70, streak);
 	capfoam += smoothstep(0.26, 0.44, v_fold) * 0.7;   // de brantaste topparna skummar alltid
 	capfoam *= 0.55 + 0.45 * fbm2(rp * 14.0 - vec2(t * 0.2, 0.0));   // riven skumkant
+	// dröjande skumstråk: spetsig brusväv utdragen i vindriktningen som ligger
+	// kvar efter gässen (referensens vita filament över hela ytan)
+	float lace = smoothstep(0.60, 0.80, fbm2(vec2(dot(rp, wind) * 2.2 - t * 0.18, dot(rp, perp) * 8.0) + 3.7));
+	capfoam = max(capfoam, lace * smoothstep(0.10, 0.28, v_fold) * 0.55);
 	// bränningskrage: bredare, rivigare och PULSERANDE med vågfolden så bruset
 	// mot klippan ser ut att slå och dra sig tillbaka (referensens vita bränningar)
 	float shore = smoothstep(island_r + 0.34, island_r - 0.02, dd)
