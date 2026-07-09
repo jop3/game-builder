@@ -40,9 +40,9 @@ game/
                     animates the flip cascade, flies a cinematic spiral camera,
                     fires drama FX on big cascades, records deterministically
   mux_audio.py    overlays the procedural soundtrack onto a recorded mp4 (headless has no audio)
-  sea.gdshader    deterministic ocean: Gerstner waves + Fresnel sky-reflection + fold-foam + ripple normals
+  sea.gdshader    deterministic ocean: Gerstner waves + Fresnel + shallow-water tint + fold-foam + ripple normals
   sky.gdshader    deterministic sky shader (drifting fbm clouds + lightning flash uniform)
-  rock.gdshader   craggy vertex-displaced wet-rock shader (fbm, derivative normals)
+  rock.gdshader   realistic wet rock: ridged+fine displacement, micro-detail normals, slope/crevice/lichen colouring
   assets/board.glb  the validated reversi_classic green-felt board (black frame)
   assets/disc.glb   the validated TWO-TONE disc (black one face, white the other)
   assets/column.glb the validated greek_arena fluted Ionic marble column (pipeline-generated)
@@ -112,6 +112,31 @@ Not a bespoke sum-of-sines — the standard CG ocean recipe (GPU Gems 1, ch. 1):
 All animated by the `t = _elapsed` uniform (never `TIME`) so it stays
 deterministic. Godot gotcha: `TAU`/`PI` are built-in shader constants — don't
 redefine them (use your own `TWO_PI`), or the shader fails to compile.
+
+Two more passes on top:
+
+- **Shallow water** near the islet is depth-faked by distance-to-shore: within
+  `shore_reach` of the island the water tints toward a bright turquoise
+  (`shore_water`), broken by noise so the band isn't a clean ring — the "clear
+  shallows over the reef" read, no depth buffer or screen refraction needed.
+- A **`ReflectionProbe`** (UPDATE_ONCE — one cheap capture at start) gives the
+  wet surfaces real local reflections of the sky, rock and board on top of the
+  shader's Fresnel sky-tint, so the marble and sea pick up a wet sheen.
+
+### The rocks (`rock.gdshader`)
+
+The islet is displaced spheres, but the *look* is all shader:
+
+- **Two displacement layers** in the vertex stage — big **ridged fbm** (sharp
+  arêtes and gullies, not smooth bumps) plus a finer fbm for grain — and the
+  fragment normal is taken from the displaced world position (`dFdx`/`dFdy`).
+- **Micro-detail normals**: perturb that normal by the gradient of a 3-D noise in
+  world space (no UVs → no stretch), so the surface catches light as grit and
+  hairline cracks.
+- **Colour by form, not a flat albedo**: crevices (low ridged value) darken like
+  ambient occlusion; up-facing slopes take a pale lichen tint; a wetness gradient
+  below the waterline darkens and glosses the stone. That variation is what reads
+  as real rock rather than grey clay.
 
 ## How the graphics were produced (reproducible)
 
