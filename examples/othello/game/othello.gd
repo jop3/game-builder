@@ -37,6 +37,7 @@ var _cx := 0.0
 var _cy := 0.0
 var _cell := 0.05
 var _surf_z := 0.03
+var _board_bottom_y := 0.5   # brädets underkant i världs-Y (piedestalens topp)
 var _border := 0.0265
 var _disc_h := 0.007
 var _bw := 0.46          # board footprint (measured)
@@ -118,6 +119,7 @@ func _ready() -> void:
 	_build_fx()
 	_build_audio()
 	_load_assets()
+	_build_pedestal()      # EFTER brädet laddats: pelaren skalas mot brädets underkant
 	_build_trays()
 	_precompute_game()
 	_play_dur = _compute_play_dur()
@@ -379,6 +381,7 @@ func _load_assets() -> void:
 	var play := bw - 2.0 * _border
 	_cell = play / 8.0
 	_surf_z = LIFT + ab.position.y + ab.size.y - 0.004  # brädets yta i världs-Y
+	_board_bottom_y = LIFT + ab.position.y              # brädets underkant i världs-Y
 	_disc_proto = _load_glb(_disc_glb)
 	_disc_proto.visible = false
 	add_child(_disc_proto)
@@ -637,7 +640,6 @@ func _build_stage() -> void:
 
 	_build_sea()
 	_build_rock_island()
-	_build_pedestal()
 	_build_coast()
 	if _sea_mat:
 		_sea_mat.set_shader_parameter("island_r", ISLAND_R)
@@ -712,7 +714,11 @@ func _build_pedestal() -> void:
 	col.visible = false
 	add_child(col)
 	var h := _aabb(col).size.y
-	var sc := (LIFT + 0.05) / maxf(h, 0.001)
+	# skala så pelarens TOPP (kapitälet) hamnar strax under brädets underkant, med
+	# en liten överlappning — brädet vilar på kapitälet, inget som tränger upp
+	# genom brädets ovansida (buggen: tidigare gissad höjd översköt brädet).
+	var target_top := _board_bottom_y + 0.01
+	var sc := target_top / maxf(h, 0.001)
 	var inst: Node3D = col.duplicate()
 	inst.visible = true
 	inst.scale = Vector3(sc * 1.5, sc, sc * 1.5)   # bredare → stadigare piedestal
