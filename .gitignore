@@ -2,5 +2,4 @@ __pycache__/
 *.pyc
 .pytest_cache/
 runs/
-runs_arena/
-runs_arena2/
+runs_*/
