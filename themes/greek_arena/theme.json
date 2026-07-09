@@ -5,21 +5,26 @@
   "palette": {
     "primary":   ["#DAD5C8", "#C9C3B4"],
     "secondary": ["#8A8C90", "#6E7076"],
-    "accent":    ["#B9AC94", "#9C8F76"],
+    "accent":    ["#6B4218", "#9C8F76"],
     "emissive":  ["#EAF2FF"],
     "forbidden": ["#00FF7F"]
   },
   "materials": [
-    "marble_white"
+    "marble_white",
+    "wood_ancient",
+    "bronze_trim",
+    "piece_ivory",
+    "piece_basalt"
   ],
-  "silhouette_language": "Classical Greek architecture: tall fluted marble columns with a square plinth base and a Doric capital (round echinus + square abacus), clean carved stone forms.",
-  "wear_range": [0.0, 0.2],
+  "silhouette_language": "Classical Greek architecture and artefacts: tall fluted marble columns with a square plinth base and a carved capital, dark aged wood, cast bronze fittings, polished stone game pieces — clean carved ancient forms.",
+  "wear_range": [0.0, 0.35],
   "detail_density_range": [0.1, 0.4],
-  "vision_style_brief": "Weathered white Greek marble under an overcast, stormy sky: a fluted Doric column, warm cream stone with thin cool-grey veining and a polished-but-worn surface. Monumental, ancient, dramatic. NOT: shiny plastic, coloured stone, sci-fi or fantasy-glowing materials, low-contrast mud.",
+  "vision_style_brief": "An ancient Greek game set under warm Mediterranean daylight: weathered warm-ivory marble with thin grey/gold veining, near-black centuries-old oiled wood, aged bronze with worn bright edges and restrained verdigris in recesses, polished ivory-marble and black-basalt stone pieces. Monumental, ancient, tactile. NOT: shiny plastic, modern tournament equipment, saturated colours, sci-fi or fantasy-glowing materials.",
   "anti_style": [
     "shiny plastic or ceramic look",
-    "saturated or coloured stone (must read as white/grey marble)",
-    "sci-fi, metallic or fantasy-glowing materials"
+    "modern tournament/product styling (felt, lacquered plastic frames)",
+    "saturated or coloured stone (marble must read white/grey, basalt near-black)",
+    "sci-fi or fantasy-glowing materials (aged bronze fittings are allowed and must read as bronze, not chrome or gold-plating)"
   ],
   "skybox_defaults": { "recipe": "stormy_overcast", "sun_elevation_deg": 18 }
 }

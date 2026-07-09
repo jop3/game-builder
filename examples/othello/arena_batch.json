@@ -6,11 +6,14 @@
     "theme": "greek_arena",
     "platform_profile": "desktop_mid",
     "seed": 9101,
-    "description": "A tall fluted white marble Greek column: a stepped plinth base, a slender fluted shaft with gentle entasis taper, and an Ionic capital with a scroll bolster and thin abacus, weathered ancient stone",
+    "description": "A thick weathered fluted white marble Greek column: a stepped plinth base, a stout fluted shaft with gentle entasis taper and deep crisp flutes, and an Ionic capital with a prominent scroll bolster and thin abacus, ancient sun-warmed stone",
     "generator": "env/column",
     "param_overrides": {
       "materials": ["marble_white"],
-      "capital_style": "ionic"
+      "capital_style": "ionic",
+      "radius_m": 0.36,
+      "flute_depth": 0.09,
+      "flutes": 20
     },
     "topology": "closed",
     "lods": "none",
@@ -18,5 +21,44 @@
       "max_texture_px": 512
     },
     "tags": ["kit:arena", "column"]
+  },
+  {
+    "schema_version": 1,
+    "asset_id": "greek_board_01",
+    "category": "prop_small",
+    "theme": "greek_arena",
+    "platform_profile": "desktop_mid",
+    "seed": 9202,
+    "description": "An ancient Greek Othello game board: an 8x8 play field of near-black centuries-old oiled wood, framed by a raised aged-bronze border rim with worn bright edges and an inlaid bronze grid, a weighty antique artefact",
+    "generator": "props/game_board",
+    "param_overrides": {
+      "border_rise_m": 0.008,
+      "grid_rib_m": 0.003
+    },
+    "topology": "closed",
+    "lods": "none",
+    "budget_overrides": {
+      "max_texture_px": 512
+    },
+    "tags": ["kit:othello", "board"]
+  },
+  {
+    "schema_version": 1,
+    "asset_id": "greek_disc_01",
+    "category": "prop_small",
+    "theme": "greek_arena",
+    "platform_profile": "desktop_mid",
+    "seed": 9203,
+    "description": "A two-tone ancient Greek Othello playing piece: polished black basalt on one face and warm ivory marble on the other, a smooth rounded stone counter split at the rim",
+    "generator": "props/game_disc",
+    "param_overrides": {
+      "materials": ["piece_basalt", "piece_ivory"]
+    },
+    "topology": "closed",
+    "lods": "none",
+    "budget_overrides": {
+      "max_texture_px": 512
+    },
+    "tags": ["kit:othello", "marker", "two-tone"]
   }
 ]

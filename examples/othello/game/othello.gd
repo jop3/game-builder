@@ -942,7 +942,7 @@ func _build_pedestal() -> void:
 	var sc := target_top / maxf(h, 0.001)
 	var inst: Node3D = col.duplicate()
 	inst.visible = true
-	inst.scale = Vector3(sc * 1.5, sc, sc * 1.5)   # bredare → stadigare piedestal
+	inst.scale = Vector3(sc * 1.7, sc, sc * 1.7)   # bredare → stadig piedestal (referensens satta pelare)
 	inst.position = Vector3(0.0, 0.0, 0.0)         # fot på klipptoppen (~y=0)
 	add_child(inst)
 	# pelarens topp i världs-Y (fot vid y=0, base-center-origin → lokal topp ≈ h)
