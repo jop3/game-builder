@@ -239,7 +239,7 @@ func _spawn_puff(p: Vector3, seedv: int) -> void:
 	var spd: float = 0.07 + 0.06 * absf(_nrand(seedv * 3 + 5))
 	var vel := Vector3(cos(ang) * spd, 0.11 + 0.05 * absf(_nrand(seedv * 3 + 9)), sin(ang) * spd)
 	_puffs.append({"n": mi, "m": m, "t": 0.0, "dur": 0.55 + 0.3 * absf(_nrand(seedv)),
-		"vel": vel, "col": Color(0.9, 0.92, 0.96), "a0": 0.65})
+		"vel": vel, "col": Color(0.9, 0.92, 0.96), "a0": 0.65, "grow": 2.2})
 
 # ett vitt skumstänk vid klippkanten som slungas upp/utåt (fejkad krossande våg)
 func _spawn_spray(seedv: int) -> void:
@@ -258,11 +258,11 @@ func _spawn_spray(seedv: int) -> void:
 	mi.material_override = m
 	mi.position = Vector3(rr * sin(a), SEA_Y + 0.01, rr * cos(a))
 	add_child(mi)
-	var up: float = 0.06 + 0.06 * absf(_nrand(seedv * 7 + 17))    # bara ett litet lyft
+	var up: float = 0.05 + 0.05 * absf(_nrand(seedv * 7 + 17))    # bara ett litet lyft
 	var out: float = 0.05 + 0.05 * absf(_nrand(seedv * 7 + 23))
 	var vel := Vector3(sin(a) * out, up, cos(a) * out)
-	_puffs.append({"n": mi, "m": m, "t": 0.0, "dur": 0.32 + 0.16 * absf(_nrand(seedv * 7 + 5)),
-		"vel": vel, "col": Color(0.95, 0.97, 1.0), "a0": 0.8})
+	_puffs.append({"n": mi, "m": m, "t": 0.0, "dur": 0.30 + 0.14 * absf(_nrand(seedv * 7 + 5)),
+		"vel": vel, "col": Color(0.78, 0.82, 0.86), "a0": 0.55, "grow": 1.4})
 
 # animera alla dramaeffekter för hand (deterministiskt, drivet av dt)
 func _update_fx(dt: float) -> void:
@@ -292,7 +292,7 @@ func _update_fx(dt: float) -> void:
 		pf.vel.y -= 0.04 * dt
 		var mi: MeshInstance3D = pf.n
 		mi.position += pf.vel * dt
-		var sc: float = 1.0 + 2.2 * k3
+		var sc: float = 1.0 + pf.grow * k3
 		mi.scale = Vector3(sc, sc, sc)
 		var mm: StandardMaterial3D = pf.m
 		var bc: Color = pf.col
@@ -300,7 +300,7 @@ func _update_fx(dt: float) -> void:
 		alive.append(pf)
 	_puffs = alive
 	# kontinuerligt skum/stänk där vågorna slår mot klippan (fejkat, dt-drivet)
-	if _frame % 4 == 0:
+	if _frame % 6 == 0:
 		_spawn_spray(_frame)
 	# blixt: en snabb dubbelblink-envelope som lyser upp scen + himmel
 	if _bolt_t < _bolt_dur:
@@ -600,15 +600,13 @@ func _build_stage() -> void:
 	e.ambient_light_sky_contribution = 0.8
 	e.ambient_light_color = Color(0.62, 0.70, 0.82)
 	e.ambient_light_energy = 0.55          # ljus dagsljus-ambient
-	e.tonemap_mode = Environment.TONE_MAPPER_AGX
-	e.tonemap_white = 2.0
+	e.tonemap_mode = Environment.TONE_MAPPER_FILMIC   # punchigare färg än AgX (havet blir blågrönt)
+	e.tonemap_white = 1.6
 	e.fog_enabled = true
 	e.fog_light_color = Color(0.72, 0.78, 0.84)   # ljus dis vid horisonten
 	e.fog_density = 0.014                   # lätt dis — havet/himlen behåller färg
 	e.fog_sky_affect = 0.0                 # låt shader-himlen stå för horisonten
-	e.glow_enabled = true
-	e.glow_intensity = 0.12
-	e.glow_bloom = 0.06
+	e.glow_enabled = false                 # inget bloom → skummet glöder inte
 	env.environment = e
 	add_child(env)
 
@@ -710,8 +708,8 @@ func _build_pedestal() -> void:
 	var sc := (LIFT + 0.05) / maxf(h, 0.001)
 	var inst: Node3D = col.duplicate()
 	inst.visible = true
-	inst.scale = Vector3(sc, sc, sc)
-	inst.position = Vector3(0.0, 0.0, 0.0)    # fot på klipptoppen (~y=0)
+	inst.scale = Vector3(sc * 1.5, sc, sc * 1.5)   # bredare → stadigare piedestal
+	inst.position = Vector3(0.0, 0.0, 0.0)         # fot på klipptoppen (~y=0)
 	add_child(inst)
 
 # avlägsen kustlinje: några låga, mörka, disiga uddar nära horisonten (fog gör

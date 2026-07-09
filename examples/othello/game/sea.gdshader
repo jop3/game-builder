@@ -9,9 +9,9 @@ render_mode cull_back, specular_schlick_ggx;
 uniform float t = 0.0;
 uniform float amp = 0.05;
 uniform float island_r = 0.62;
-uniform vec3 deep : source_color = vec3(0.035, 0.075, 0.11);
-uniform vec3 shallow : source_color = vec3(0.07, 0.16, 0.19);
-uniform vec3 foam_col : source_color = vec3(0.80, 0.85, 0.90);
+uniform vec3 deep : source_color = vec3(0.03, 0.11, 0.15);
+uniform vec3 shallow : source_color = vec3(0.10, 0.27, 0.30);
+uniform vec3 foam_col : source_color = vec3(0.82, 0.87, 0.90);
 
 varying vec3 v_wpos;
 varying float v_h;
@@ -51,7 +51,7 @@ void fragment() {
 
 	// vitkammar: skum på topparna, uppbrutet av brus så det inte blir jämna band
 	float fnoise = vnoise(v_wpos.xz * 6.0 + vec2(t * 0.15, -t * 0.1));
-	float crest = smoothstep(0.24, 0.7, v_h) * smoothstep(0.32, 0.7, fnoise);
+	float crest = smoothstep(0.12, 0.55, v_h) * smoothstep(0.28, 0.62, fnoise);
 	// skumkrage där havet bryter mot ön
 	float d = length(v_wpos.xz);
 	float shore = smoothstep(island_r + 0.14, island_r - 0.02, d)
