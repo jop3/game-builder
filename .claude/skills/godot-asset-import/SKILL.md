@@ -211,6 +211,17 @@ Corollaries that bite when you make the camera cinematic:
   sum the timeline's exact duration up front from the same constants `_step` consumes, then
   key the move to `clampf(_elapsed / total, 0, 1)` through a `smoothstep`. Verify the
   *extreme* frames (first, mid-descent, last), not just the middle.
+- **Don't eyeball geometry in low-res smoke frames.** A pedestal punching *through* a board
+  is a handful of stray bright pixels at 640×360 — trivially mistaken for a game piece — but
+  glaring at 1280×720. Two guards: (a) a headless **geometry audit** mode (`-- --audit`) that
+  builds the scene and asserts spatial invariants *without rendering* (top of A below top of
+  B but reaching B's underside; movable objects on their surface, not at the base; nothing
+  below sea level), exiting non-zero on violation; and (b) spot-check a real **high-res**
+  still of the risky frame. Make the audit a **verify-the-verifier**: feed the checker known
+  broken values and require it to go RED on each, so a silently-broken audit can't pass. The
+  bug that motivated this came from *ordering* — a dependent object was placed (with a
+  guessed size) before the object it should measure against was loaded; build it after, and
+  measure.
 
 **Audio: headless has no audio driver** (`AudioServer` falls back to the dummy driver — no
 sound reaches the PNG frames). So you cannot "record" audio inline. Instead make it

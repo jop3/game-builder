@@ -108,12 +108,17 @@ var _p_win: AudioStreamPlayer
 var _p_thunder: AudioStreamPlayer
 var _events := []           # [{f, kind, idx}] för muxern vid inspelning
 
+# --- audit ---
+var _audit_mode := false
+var _pedestal_top_y := 0.0  # pelarens topp i världs-Y (för geometri-audit)
+
 func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--record="): _record_dir = a.substr(9)
 		elif a.begins_with("--fps="): _fps = float(a.substr(6))
 		elif a.begins_with("--board="): _board_glb = a.substr(8)
 		elif a.begins_with("--disc="): _disc_glb = a.substr(7)
+		elif a == "--audit": _audit_mode = true   # headless geometri-kontroll, ingen rendering
 
 	_build_stage()
 	_build_fx()
@@ -125,8 +130,67 @@ func _ready() -> void:
 	_play_dur = _compute_play_dur()
 	_schedule_bolts()
 	_place_start()
+	if _audit_mode:
+		_audit_selftest()   # verifiera att kontrollen faktiskt slår rött på trasigt
+		_audit()            # verifiera den riktiga scenen
+		get_tree().quit()
+		return
 	# drive everything from a manual clock so recordings are deterministic
 	_run()
+
+# Headless geometri-audit: verifierar scenens rumsliga invarianter DETERMINISTISKT
+# (ingen rendering, ingen gissning). Fångar precis den klass av bugg som en
+# lågupplöst ögonkontroll missade: pelaren som tränger upp genom brädet, brickor
+# på fel höjd, bräde under havsnivå. Skriver AUDIT_PASS eller AUDIT_FAIL-rader.
+# REN kontrollfunktion (inga noder) → återanvänds av både den skarpa auditen och
+# self-testet nedan, så kontrollen kan verifieras mot medvetet trasiga värden.
+func _audit_violations(ped_top: float, board_bottom: float, board_top: float,
+		surf: float, max_disc_off: float, sea: float) -> PackedStringArray:
+	var f := PackedStringArray()
+	if ped_top > board_top - 0.005:
+		f.append("POKE_THROUGH pedestal_top=%.3f > board_top=%.3f" % [ped_top, board_top])
+	if ped_top < board_bottom - 0.03:
+		f.append("FLOATING_BOARD pedestal_top=%.3f << board_bottom=%.3f" % [ped_top, board_bottom])
+	if max_disc_off > 0.05:
+		f.append("DISC_OFF_SURFACE max_offset=%.3f" % max_disc_off)
+	if board_bottom <= sea:
+		f.append("BOARD_BELOW_SEA board_bottom=%.3f <= sea=%.3f" % [board_bottom, sea])
+	return f
+
+func _audit() -> void:
+	var board_top := _surf_z + 0.004
+	var want_disc_y := _surf_z + _disc_h / 2.0
+	var max_off := 0.0
+	for cell in _discs:
+		max_off = maxf(max_off, absf(_discs[cell].position.y - want_disc_y))
+	var fails := _audit_violations(_pedestal_top_y, _board_bottom_y, board_top, _surf_z, max_off, SEA_Y)
+	if fails.is_empty():
+		print("AUDIT_PASS pedestal_top=%.3f board_bottom=%.3f board_top=%.3f surf=%.3f" % [
+			_pedestal_top_y, _board_bottom_y, board_top, _surf_z])
+	else:
+		for f in fails:
+			print("AUDIT_FAIL: ", f)
+
+# verifiera-verifieraren: mata kontrollen med kända bra OCH kända trasiga värden
+# och kräv att den är tyst på det bra och slår RÖTT på varje trasigt fall. Utan
+# detta kan en tyst-bruten audit (som alltid returnerar "ok") ge falsk trygghet.
+func _audit_selftest() -> void:
+	var ok := true
+	# rent bra fall → inga violations
+	if not _audit_violations(0.51, 0.50, 0.546, 0.542, 0.0, -0.16).is_empty():
+		ok = false; print("SELFTEST_FAIL: good scene flagged")
+	# varje trasigt fall MÅSTE flaggas:
+	var cases := {
+		"poke": [0.55, 0.50, 0.546, 0.542, 0.0, -0.16],       # pelare genom bräde
+		"floating": [0.30, 0.50, 0.546, 0.542, 0.0, -0.16],   # bräde svävar
+		"disc_off": [0.51, 0.50, 0.546, 0.542, 0.40, -0.16],  # brickor vid foten
+		"sunk": [0.51, -0.20, 0.546, 0.542, 0.0, -0.16],      # bräde under havet
+	}
+	for name in cases:
+		var c: Array = cases[name]
+		if _audit_violations(c[0], c[1], c[2], c[3], c[4], c[5]).is_empty():
+			ok = false; print("SELFTEST_FAIL: broken case '%s' NOT flagged" % name)
+	print("SELFTEST_PASS" if ok else "SELFTEST_FAILED")
 
 # summera partiets exakta speltid (samma tidsbudget som _step förbrukar) så
 # kameraspiralen kan landa precis när sista draget är klart
@@ -724,6 +788,8 @@ func _build_pedestal() -> void:
 	inst.scale = Vector3(sc * 1.5, sc, sc * 1.5)   # bredare → stadigare piedestal
 	inst.position = Vector3(0.0, 0.0, 0.0)         # fot på klipptoppen (~y=0)
 	add_child(inst)
+	# pelarens topp i världs-Y (fot vid y=0, base-center-origin → lokal topp ≈ h)
+	_pedestal_top_y = inst.position.y + sc * h
 
 # avlägsen kustlinje: några låga, mörka, disiga uddar nära horisonten (fog gör
 # dem atmosfäriskt bleka), utspridda på fjärran sidorna som i referensen

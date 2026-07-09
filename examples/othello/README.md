@@ -64,10 +64,32 @@ drives both a scene flash and the sky shader's `flash` uniform; thunder follows
 pedestal (`LIFT`); note `_aabb()` measures in the board's *local* frame, so the
 lift is added back into the play-surface height.
 
-Run the tests: `godot --headless --path game --script res://test_rules.gd`
-Play it:       `godot --path game res://othello.tscn`   (with live procedural sound)
-Record a game: `godot --path game res://othello.tscn -- --record=DIR --fps=24`
-Add the sound: `python3 game/mux_audio.py --dir DIR --video silent.mp4 --out othello_game.mp4`
+Run the tests:  `godot --headless --path game --script res://test_rules.gd`
+Audit geometry: `bash verify_scene.sh`   (headless — MUST pass before recording)
+Play it:        `godot --path game res://othello.tscn`   (with live procedural sound)
+Record a game:  `godot --path game res://othello.tscn -- --record=DIR --fps=24`
+Add the sound:  `python3 game/mux_audio.py --dir DIR --video silent.mp4 --out othello_game.mp4`
+
+### Guarding against silent geometry bugs
+
+A pedestal that punched **up through the board** shipped once because it was
+eyeballed in low-res smoke frames, where a poke-through is a couple of stray
+bright pixels easily mistaken for a disc. Two habits stop that recurring:
+
+1. **`verify_scene.sh`** runs the scene headless in `--audit` mode: it builds the
+   rock, pedestal, board and discs and asserts the spatial invariants
+   *deterministically, without rendering* — pedestal top below the board top but
+   reaching its underside, discs on the play surface (not at the pedestal foot),
+   board above sea level. It first runs a **self-test** that feeds the checker
+   deliberately broken values and requires it to go RED on every one, so a
+   silently-broken audit can't pass. Run it before every recording.
+2. **Spot-check a HIGH-RES still**, not a 640×360 frame — extract one 1280×720
+   landing frame and actually scrutinise it. Interpenetration and z-fighting are
+   invisible at smoke resolution.
+
+The root cause here was ordering: `_build_pedestal()` ran before `_load_assets()`,
+so the column height was a hardcoded guess instead of measured against the board.
+It now builds *after* the board loads and scales to `_board_bottom_y`.
 
 ## How the graphics were produced (reproducible)
 
