@@ -40,24 +40,29 @@ game/
                     animates the flip cascade, flies a cinematic spiral camera,
                     fires drama FX on big cascades, records deterministically
   mux_audio.py    overlays the procedural soundtrack onto a recorded mp4 (headless has no audio)
-  sea.gdshader    deterministic stormy-sea shader (waves + foam, driven by an _elapsed uniform)
-  sky.gdshader    deterministic stormy-sky shader (drifting fbm clouds + lightning flash uniform)
+  sea.gdshader    deterministic sea shader (Gerstner-ish waves, whitecaps, shoreline foam)
+  sky.gdshader    deterministic sky shader (drifting fbm clouds + lightning flash uniform)
+  rock.gdshader   craggy vertex-displaced wet-rock shader (fbm, derivative normals)
   assets/board.glb  the validated reversi_classic green-felt board (black frame)
   assets/disc.glb   the validated TWO-TONE disc (black one face, white the other)
-  assets/column.glb the validated greek_arena fluted marble column (pipeline-generated)
+  assets/column.glb the validated greek_arena fluted Ionic marble column (pipeline-generated)
   othello_game.mp4  a full recorded game on the Greek island arena, with sound (Black 40 – White 24)
 ```
 
-### The arena (Greek island in a stormy sea)
+### The arena (a board on a marble pedestal, in a stormy sea)
 
-The board is staged on a small marble island ringed by a colonnade of Greek
-columns, under an overcast sky over a stormy sea, with lightning + thunder. The
-**columns are a pipeline asset** (`env/column` generator + `greek_arena` theme's
-`marble_white` material, requested in `arena_batch.json`, validated through V1 +
-V2). The **sea, sky and island** are procedural Godot (two `.gdshader` files +
-scene geometry) — animated by an `_elapsed` uniform, never `TIME`, so the render
-stays deterministic. Lightning drives both a scene flash and the sky shader's
-`flash` uniform; thunder follows ~0.5 s later through the same audio-event log.
+Staged to a reference photo: the board sits on a **single fluted Ionic marble
+column** rising from a **rocky islet**, ringed by a choppy, foam-capped sea with
+a distant coastline, under a bright dramatic sky — with lightning + thunder. The
+**column is a pipeline asset** (`env/column` generator, Ionic capital, +
+`greek_arena` theme's `marble_white` material, requested in `arena_batch.json`,
+validated through V1 + V2). The **sea, sky and rock islet** are procedural Godot
+(three `.gdshader` files + scene geometry) — every animated value reads an
+`_elapsed` uniform, never `TIME`, so the render stays deterministic. Lightning
+drives both a scene flash and the sky shader's `flash` uniform; thunder follows
+~0.5 s later through the same audio-event log. The board is lifted onto the
+pedestal (`LIFT`); note `_aabb()` measures in the board's *local* frame, so the
+lift is added back into the play-surface height.
 
 Run the tests: `godot --headless --path game --script res://test_rules.gd`
 Play it:       `godot --path game res://othello.tscn`   (with live procedural sound)
