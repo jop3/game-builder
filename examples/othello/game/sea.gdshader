@@ -51,7 +51,7 @@ void fragment() {
 
 	// vitkammar: skum på topparna, uppbrutet av brus så det inte blir jämna band
 	float fnoise = vnoise(v_wpos.xz * 6.0 + vec2(t * 0.15, -t * 0.1));
-	float crest = smoothstep(0.35, 0.85, v_h) * smoothstep(0.35, 0.75, fnoise);
+	float crest = smoothstep(0.24, 0.7, v_h) * smoothstep(0.32, 0.7, fnoise);
 	// skumkrage där havet bryter mot ön
 	float d = length(v_wpos.xz);
 	float shore = smoothstep(island_r + 0.14, island_r - 0.02, d)

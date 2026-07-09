@@ -64,9 +64,9 @@ const LIFT := 0.5          # brädet lyft upp på pelarpiedestalen
 const SHOW_TRAYS := false  # ö-arenan: brädet ensamt på piedestalen (som referensen)
 const CAM_CENTER := Vector3(0.0, 0.34, 0.0)   # mellan brädet (~0.5) och vattnet
 const CAM_EL_TOP := 86.0   # ° elevation vid start (nästan rakt ovanför)
-const CAM_EL_END := 22.0   # ° elevation vid landning (låg → havet + horisont bakom)
-const CAM_D_TOP := 1.25    # kameraavstånd uppe
-const CAM_D_END := 1.30    # kameraavstånd nere (tillbakadragen så horisonten ryms)
+const CAM_EL_END := 25.0   # ° elevation vid landning (låg → havet + horisont bakom)
+const CAM_D_TOP := 1.15    # kameraavstånd uppe
+const CAM_D_END := 1.06    # kameraavstånd nere (brädet + piedestalen större i bild)
 const CAM_SPINS := 1.5     # antal varv runt bordet under nedstigningen
 
 # --- drama vid stora vändningskaskader ---
@@ -243,10 +243,12 @@ func _spawn_puff(p: Vector3, seedv: int) -> void:
 
 # ett vitt skumstänk vid klippkanten som slungas upp/utåt (fejkad krossande våg)
 func _spawn_spray(seedv: int) -> void:
+	# lågt vitt skum vid klippans vattenlinje — små fläckar som poppar och tonas
+	# ut nära vattnet (ALDRIG upp längs pelaren), så piedestalen aldrig döljs
 	var a: float = _nrand(seedv * 7 + 3) * PI
-	var rr: float = ISLAND_R * (0.92 + 0.12 * absf(_nrand(seedv * 7 + 11)))
+	var rr: float = ISLAND_R * (0.94 + 0.12 * absf(_nrand(seedv * 7 + 11)))
 	var mi := MeshInstance3D.new()
-	var q := QuadMesh.new(); q.size = Vector2(0.06, 0.06)
+	var q := QuadMesh.new(); q.size = Vector2(0.045, 0.045)
 	mi.mesh = q
 	var m := StandardMaterial3D.new()
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -254,13 +256,13 @@ func _spawn_spray(seedv: int) -> void:
 	m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
 	m.albedo_texture = _puff_tex
 	mi.material_override = m
-	mi.position = Vector3(rr * sin(a), SEA_Y + 0.02, rr * cos(a))
+	mi.position = Vector3(rr * sin(a), SEA_Y + 0.01, rr * cos(a))
 	add_child(mi)
-	var up: float = 0.32 + 0.22 * absf(_nrand(seedv * 7 + 17))   # slungas uppåt
-	var out: float = 0.06 + 0.05 * absf(_nrand(seedv * 7 + 23))
+	var up: float = 0.06 + 0.06 * absf(_nrand(seedv * 7 + 17))    # bara ett litet lyft
+	var out: float = 0.05 + 0.05 * absf(_nrand(seedv * 7 + 23))
 	var vel := Vector3(sin(a) * out, up, cos(a) * out)
-	_puffs.append({"n": mi, "m": m, "t": 0.0, "dur": 0.5 + 0.25 * absf(_nrand(seedv * 7 + 5)),
-		"vel": vel, "col": Color(0.95, 0.97, 1.0), "a0": 0.85})
+	_puffs.append({"n": mi, "m": m, "t": 0.0, "dur": 0.32 + 0.16 * absf(_nrand(seedv * 7 + 5)),
+		"vel": vel, "col": Color(0.95, 0.97, 1.0), "a0": 0.8})
 
 # animera alla dramaeffekter för hand (deterministiskt, drivet av dt)
 func _update_fx(dt: float) -> void:
@@ -298,7 +300,7 @@ func _update_fx(dt: float) -> void:
 		alive.append(pf)
 	_puffs = alive
 	# kontinuerligt skum/stänk där vågorna slår mot klippan (fejkat, dt-drivet)
-	if _frame % 2 == 0:
+	if _frame % 4 == 0:
 		_spawn_spray(_frame)
 	# blixt: en snabb dubbelblink-envelope som lyser upp scen + himmel
 	if _bolt_t < _bolt_dur:
@@ -601,8 +603,8 @@ func _build_stage() -> void:
 	e.tonemap_mode = Environment.TONE_MAPPER_AGX
 	e.tonemap_white = 2.0
 	e.fog_enabled = true
-	e.fog_light_color = Color(0.70, 0.76, 0.82)   # ljus dis (dagsljus) → havet smälter in
-	e.fog_density = 0.05
+	e.fog_light_color = Color(0.72, 0.78, 0.84)   # ljus dis vid horisonten
+	e.fog_density = 0.014                   # lätt dis — havet/himlen behåller färg
 	e.fog_sky_affect = 0.0                 # låt shader-himlen stå för horisonten
 	e.glow_enabled = true
 	e.glow_intensity = 0.12

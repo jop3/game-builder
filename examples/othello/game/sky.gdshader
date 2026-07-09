@@ -32,7 +32,7 @@ void sky() {
 	// projicera blickriktningen på ett molnplan
 	vec2 uv = EYEDIR.xz / (EYEDIR.y + 0.35);
 	float mask = fbm(uv * 1.5 + vec2(t * 0.02, t * 0.012));
-	mask = smoothstep(0.42, 0.82, mask) * smoothstep(0.02, 0.20, EYEDIR.y);   // mer molntäcke
+	mask = smoothstep(0.40, 0.74, mask) * smoothstep(-0.06, 0.10, EYEDIR.y);   // moln ända ner mot horisonten
 	vec3 cloud = mix(cloud_dark, cloud_light, fbm(uv * 3.0 + 5.0));
 	cloud += flash * 0.8;                       // blixten lyser upp molnen
 	COLOR = mix(base + flash * 0.25, cloud, mask);
