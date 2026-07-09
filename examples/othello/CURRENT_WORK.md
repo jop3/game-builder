@@ -97,6 +97,33 @@ improvements:
     look) + doctrine §3.5 + look-dev sections in the `asset-visual-qa` skill and
     Snittet's `spelbygge`/`godot-shaders` skills.
 
+**Same session, part 3 (natten — det antika spelsetet):**
+
+11. **Hela spelsetet omgenererat i greek_arena-temat** (användarens feedback:
+    brädet + pelaren skrek "modern produkt" mot referensen). Fyra nya
+    materialrecept: `wood_ancient` (nästan-svart uråldrigt trä, spelfältet),
+    `bronze_trim` (åldrad brons m. nötta kanter + återhållsam ärg — ram/rutnät),
+    `piece_ivory`/`piece_basalt` (två-tons stenbricka). Pelaren tjockare
+    (radius 0.36, djupare flöjlar) + piedestal-skala 1.7. Alla tre assets
+    `validated` genom V1+V2 (agent-vision) på 1 iteration styck.
+12. **`regen_assets.sh`**: batch + deliver som tvåstegskommando; deliver vägrar
+    kopiera icke-validerade assets.
+13. Varmare nyckelljus (1.0,0.92,0.78 @ 1.9) så marmor/elfenben läser solvarmt.
+
+**Del 3-gotchas:**
+- **`matlib.nodes.metal_base` bleker basfärgen** (vit-mixande breakup) — bygg
+  färgkedjan i receptet och sätt Metallic direkt (fantasy_iron_trim
+  dokumenterar samma fälla; första brons-bakningen kom ut som elfenben).
+- **Recept-redigering under körande batch biter inte** (Python-modulcache) —
+  döda batchen, fixa receptet, kör om. Kolumnen var redan validerad →
+  omkörningen tog bara bräde+bricka via en delmängds-requestfil.
+- **Agent-vision-flödet**: kör batchen i bakgrunden + en `Monitor` som bevakar
+  `exchange/call_*/` utan `report.json`; varje event = titta på `images/`,
+  skriv `report.json` (tool-input-objektet; `checks_not_applicable` MÅSTE
+  vara `[]`). Bild 00..NN följer prompt.txt:s view_id-ordning.
+- I normal-debugpassen är MAGENTA en giltig -Y-normal (referenskuben visar
+  samma) — bara PURE RED är backfacing.
+
 Progression stills for this pass live only in the session scratchpad; the
 committed evidence is the new `othello_game.mp4`.
 

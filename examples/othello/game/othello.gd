@@ -820,8 +820,8 @@ func _build_stage() -> void:
 
 	# Dagsljus-sol: ljus, en aning varm, mjuka skuggor uppifrån-sidan.
 	var key := DirectionalLight3D.new()
-	key.light_color = Color(1.0, 0.95, 0.85)   # varmt dagsljus
-	key.light_energy = 2.0                 # starkare sol → mer kontrast (svart läser ändå svart)
+	key.light_color = Color(1.0, 0.92, 0.78)   # varmare medelhavssol — marmorn ska läsa solvarm kräm, inte kritvit
+	key.light_energy = 1.9                 # stark sol men utan att elfenben/marmor fräts ur
 	key.light_angular_distance = 2.0
 	key.shadow_enabled = true
 	key.rotation = Vector3(deg_to_rad(-52.0), deg_to_rad(-38.0), 0.0)
