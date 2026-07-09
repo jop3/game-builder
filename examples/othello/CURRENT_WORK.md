@@ -78,6 +78,15 @@ improvements:
 Progression stills for this pass live only in the session scratchpad; the
 committed evidence is the new `othello_game.mp4`.
 
+## Inspelningspolicy (användarens direktiv 2026-07-09)
+
+**Spela INTE in en ny film för små steg.** En full inspelning kostar ~30–40 min
+under lavapipe; användaren vill inte se filmer av inkrementella förbättringar.
+Iterera med `--still`-läget (sekunder, gratis) och spela in + committa en ny
+`othello_game.mp4` FÖRST när scenen tagit ett STORT kliv mot referensbilden
+(`spec/reference_sea_arena.png`) — t.ex. en helt omarbetad delkomponent, inte
+justerade trösklar/färger.
+
 ## How to work on this (fresh cloud session)
 
 ```bash
