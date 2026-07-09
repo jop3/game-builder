@@ -69,6 +69,9 @@ Audit geometry: `bash verify_scene.sh`   (headless — MUST pass before recordin
 Play it:        `godot --path game res://othello.tscn`   (with live procedural sound)
 Record a game:  `godot --path game res://othello.tscn -- --record=DIR --fps=24`
 Add the sound:  `python3 game/mux_audio.py --dir DIR --video silent.mp4 --out othello_game.mp4`
+Look-dev still: `godot --path game res://othello.tscn -- --still=SECONDS --out=x.png`
+                (fast-forwards the deterministic clock, renders ONE frame — a shader
+                iteration costs ~40 s instead of a full recording; run under xvfb+vulkan)
 
 ### Guarding against silent geometry bugs
 
@@ -104,7 +107,14 @@ Not a bespoke sum-of-sines — the standard CG ocean recipe (GPU Gems 1, ch. 1):
   the near water deep — the single biggest "reads as water" cue.
 - **Foam from the wave fold (Jacobian)** — `Σ Q·k·A·sin(...)`; where crests
   pinch past vertical the surface would self-fold, which is exactly where real
-  water froths. Plus a broken shoreline foam ring where sea meets rock.
+  water froths. The caps are gated by a **wind-stretched streak noise**
+  (anisotropic along the main wind direction) so the whitecaps come in ragged
+  wind rows, and the shoreline foam collar **pulses with the local fold** so
+  the surf appears to strike and withdraw. NOTE: the fold sum tops out at
+  `Σ Q·k·A` — if you retune the wave set, re-check that the foam smoothsteps
+  are still reachable or every whitecap silently disappears.
+- **Crest translucency** — the tops tint toward a bright blue-green with wave
+  height (fake subsurface: the "glass" of a breaking crest).
 - **Ripple normals** — per-fragment, the normal is perturbed by the gradient of
   a scrolling value-noise, adding sub-tessellation surface texture and letting
   the key light throw sun-glitter sparkle across the crests.
@@ -127,16 +137,25 @@ Two more passes on top:
 
 The islet is displaced spheres, but the *look* is all shader:
 
-- **Two displacement layers** in the vertex stage — big **ridged fbm** (sharp
-  arêtes and gullies, not smooth bumps) plus a finer fbm for grain — and the
-  fragment normal is taken from the displaced world position (`dFdx`/`dFdy`).
-- **Micro-detail normals**: perturb that normal by the gradient of a 3-D noise in
-  world space (no UVs → no stretch), so the surface catches light as grit and
-  hairline cracks.
-- **Colour by form, not a flat albedo**: crevices (low ridged value) darken like
-  ambient occlusion; up-facing slopes take a pale lichen tint; a wetness gradient
-  below the waterline darkens and glosses the stone. That variation is what reads
-  as real rock rather than grey clay.
+- **Three displacement layers** in the vertex stage — big **ridged fbm** (sharp
+  arêtes and gullies, not smooth bumps), mid-frequency ridges, and a fine fbm
+  grain. Sampled in **object-size units** with a per-instance world offset and
+  scaled by a per-instance **`dscale`** uniform: a fixed amplitude gave the
+  small boulders glass-shard spikes (± half their radius), a fixed frequency
+  made them smooth potatoes (under one noise period per block). Displacement
+  fades out at the mesh's local pole (the sphere's UV pinch otherwise renders
+  a radial "starburst" right under the pedestal).
+- **Softened geometric normals**: the fragment normal blends the `dFdx`/`dFdy`
+  facet normal with the smooth interpolated normal (pure facet normals read as
+  crumpled foil on big triangles), then gets a micro-perturbation from the
+  gradient of a 3-D world-space noise (no UVs → no stretch) for grit.
+- **Colour by form and world height, not a flat albedo**: narrow sedimentary
+  bands in world-Y (sin bands + noise warp — coherent layers across the whole
+  islet), crevices darken like ambient occlusion, up-facing slopes take a
+  lichen tint, and a *narrow* wet band at the waterline darkens and glosses
+  the stone — full-height wetness read as wet brown clay. Dry rock keeps
+  `SPECULAR ≈ 0`: with a ReflectionProbe in the scene, even 0.18 drapes a
+  white sky-sheen veil over the whole rock.
 
 ## How the graphics were produced (reproducible)
 
@@ -199,6 +218,14 @@ look evolved across three themes as the design was refined:
   so the game logs each sound event + saves the streams, and `mux_audio.py`
   builds the soundtrack and muxes it in — the event log is the single source of
   truth, so picture and sound can't drift.
+
+### Reusable environment kit
+
+The three environment shaders graduated into **`envkit/godot/`** at the repo
+root — the canonical, documented, game-agnostic copies (determinism contract,
+integration gotchas, look-dev harness pattern). The copies here are consumers;
+`bash envkit/check_sync.sh` fails if they diverge. Iterate here (the look-dev
+harness lives here), then copy back to `envkit/` and commit both.
 
 The full playable game (rules + bot + flip animation, spec M1/M3/M4) **is built**
 here; the remaining spec milestones (difficulty tiers, hotseat) are future work.

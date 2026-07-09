@@ -112,6 +112,10 @@ var _events := []           # [{f, kind, idx}] för muxern vid inspelning
 var _audit_mode := false
 var _pedestal_top_y := 0.0  # pelarens topp i världs-Y (för geometri-audit)
 
+# --- look-dev-stillbild ---
+var _still_t := -1.0        # ≥0 → rendera EN bildruta vid denna speltid och avsluta
+var _still_out := ""        # PNG-sökväg för stillbilden
+
 func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--record="): _record_dir = a.substr(9)
@@ -119,6 +123,8 @@ func _ready() -> void:
 		elif a.begins_with("--board="): _board_glb = a.substr(8)
 		elif a.begins_with("--disc="): _disc_glb = a.substr(7)
 		elif a == "--audit": _audit_mode = true   # headless geometri-kontroll, ingen rendering
+		elif a.begins_with("--still="): _still_t = float(a.substr(8))   # look-dev: en bildruta
+		elif a.begins_with("--out="): _still_out = a.substr(6)
 
 	_build_stage()
 	_build_fx()
@@ -135,8 +141,36 @@ func _ready() -> void:
 		_audit()            # verifiera den riktiga scenen
 		get_tree().quit()
 		return
+	if _still_t >= 0.0:
+		_still()            # look-dev: spola fram, rendera EN bildruta, avsluta
+		return
 	# drive everything from a manual clock so recordings are deterministic
 	_run()
+
+# Look-dev-stillbild: spola den deterministiska klockan till _still_t UTAN att
+# rendera varje steg (samma _step/dt som inspelningen → samma bild som motsvarande
+# filmruta), rendera sedan EN bildruta och spara. Gör shader-iterationen sekunder
+# i stället för en hel 47 s-inspelning. Kör under xvfb+vulkan precis som record.
+func _still() -> void:
+	var dt := 1.0 / _fps
+	while _elapsed < _still_t and not (_phase == "done" and _done_t >= END_HOLD):
+		_step(dt)
+		_elapsed += dt
+		_frame += 1
+	_update_camera()
+	if _sea_mat:
+		_sea_mat.set_shader_parameter("t", _elapsed)
+	if _sky_mat:
+		_sky_mat.set_shader_parameter("t", _elapsed)
+	# några bildrutor innan fångst: reflektionssonden (UPDATE_ONCE) och
+	# shader-kompileringen behöver hinna klart
+	for i in 30:
+		await RenderingServer.frame_post_draw
+	var img := get_viewport().get_texture().get_image()
+	var out := _still_out if not _still_out.is_empty() else "still.png"
+	img.save_png(out)
+	print("STILL_SAVED t=%.2f frame=%d -> %s" % [_elapsed, _frame, out])
+	get_tree().quit()
 
 # Headless geometri-audit: verifierar scenens rumsliga invarianter DETERMINISTISKT
 # (ingen rendering, ingen gissning). Fångar precis den klass av bugg som en
@@ -672,8 +706,8 @@ func _build_stage() -> void:
 	e.tonemap_mode = Environment.TONE_MAPPER_FILMIC   # punchigare färg än AgX (havet blir blågrönt)
 	e.tonemap_white = 1.6
 	e.fog_enabled = true
-	e.fog_light_color = Color(0.72, 0.78, 0.84)   # ljus dis vid horisonten
-	e.fog_density = 0.014                   # lätt dis — havet/himlen behåller färg
+	e.fog_light_color = Color(0.68, 0.74, 0.82)   # blågrått dis vid horisonten
+	e.fog_density = 0.007                   # tunnare dis — havet behåller sin djupa färg långt ut
 	e.fog_sky_affect = 0.0                 # låt shader-himlen stå för horisonten
 	e.glow_enabled = false                 # inget bloom → skummet glöder inte
 	env.environment = e
@@ -690,7 +724,7 @@ func _build_stage() -> void:
 	# himmelsblå fill från kamerahållet
 	var fill := OmniLight3D.new()
 	fill.light_color = Color(0.70, 0.80, 0.95)
-	fill.light_energy = 0.40
+	fill.light_energy = 0.22   # dovare — 0.40 la en blåvit slöja över klippan
 	fill.omni_range = 5.0
 	fill.position = Vector3(0.1, 0.8, 1.0)
 	add_child(fill)
@@ -730,8 +764,8 @@ func _build_sea() -> void:
 	var sea := MeshInstance3D.new()
 	var pm := PlaneMesh.new()
 	pm.size = Vector2(60.0, 60.0)
-	pm.subdivide_width = 200        # tätare → Gerstner-vågorna löser upp sig nära ön
-	pm.subdivide_depth = 200
+	pm.subdivide_width = 280        # tätare → även den korta choppen löses upp nära ön
+	pm.subdivide_depth = 280
 	sea.mesh = pm
 	_sea_mat = ShaderMaterial.new()
 	_sea_mat.shader = load("res://sea.gdshader")
@@ -754,12 +788,13 @@ func _build_rock_island() -> void:
 	var sm := SphereMesh.new()
 	sm.radius = ISLAND_R * 1.15
 	sm.height = ISLAND_R * 1.6
-	sm.radial_segments = 96
-	sm.rings = 48
+	sm.radial_segments = 160        # tät nog att förskjutningen inte facetterar
+	sm.rings = 80
 	main.mesh = sm
 	main.material_override = mat
 	main.scale = Vector3(1.0, 0.52, 1.0)
-	main.position = Vector3(0.0, -0.28, 0.0)
+	main.position = Vector3(0.0, -0.26, 0.0)   # topphyllan strax ÖVER y=0 → plinten bäddas i sten
+	main.set_instance_shader_parameter("dscale", 1.0)
 	add_child(main)
 	# taggiga klippblock runt foten — några sticker upp som spetsar, andra ligger
 	# vid vattenlinjen; varierad storlek/höjd för en ojämn skärgårdssilhuett
@@ -771,14 +806,19 @@ func _build_rock_island() -> void:
 		var cr := ISLAND_R * (0.3 + 0.22 * absf(_nrand(i * 5 + 7)))
 		cs.radius = cr
 		cs.height = cr * (1.6 + 1.4 * absf(_nrand(i * 5 + 13)))   # några spetsiga
-		cs.radial_segments = 40
-		cs.rings = 24
+		cs.radial_segments = 72
+		cs.rings = 36
 		chunk.mesh = cs
 		chunk.material_override = mat
 		var peak := 0.5 + 0.5 * absf(_nrand(i * 5 + 3))
-		chunk.scale = Vector3(1.0, peak, 1.0)
+		# ojämn X/Z-skala → kantigare, mindre bollig silhuett
+		chunk.scale = Vector3(1.0 + 0.35 * _nrand(i * 5 + 21), peak, 1.0 + 0.35 * _nrand(i * 5 + 27))
 		chunk.position = Vector3(r * sin(a), SEA_Y - 0.02 + 0.10 * absf(_nrand(i)), r * cos(a))
-		chunk.rotation.y = _nrand(i * 5 + 9) * PI
+		# rotera runt alla axlar: sfärpolens UV-kläm ("blomman") hamnar åt slumpat
+		# håll i stället för att alltid titta rakt upp mot kameran
+		chunk.rotation = Vector3(_nrand(i * 5 + 15) * PI, _nrand(i * 5 + 9) * PI, _nrand(i * 5 + 19) * PI)
+		# förskjutning i proportion till blockets egen radie (se dscale i shadern)
+		chunk.set_instance_shader_parameter("dscale", cr / (ISLAND_R * 1.15))
 		add_child(chunk)
 
 # EN central marmorpelare som piedestal: brädet vilar på kapitälet (brädet är
@@ -821,17 +861,23 @@ func _build_coast() -> void:
 		var wid: float = r[3]
 		var haze: float = r[4]
 		var m := MeshInstance3D.new()
-		# tillplattad prismalik kulle (box med avsmalnande topp via skalning)
-		var bx := BoxMesh.new()
-		bx.size = Vector3(wid, hgt, wid * 0.4)
-		m.mesh = bx
+		# tillplattad, utsträckt sfär → mjuk kullsilhuett (boxarna lästes som
+		# svävande rektangulära plattor mot horisonten)
+		var sph := SphereMesh.new()
+		sph.radius = 0.5
+		sph.height = 1.0
+		sph.radial_segments = 24
+		sph.rings = 12
+		m.mesh = sph
+		m.scale = Vector3(wid, hgt * 2.0, wid * 0.35)   # halva sfären ovan vattnet
 		var mm := StandardMaterial3D.new()
-		# ju längre bort desto blekare/blåare (luftperspektiv)
-		var col := Color(0.42, 0.50, 0.58).lerp(Color(0.74, 0.79, 0.84), haze)
+		# oskuggad silhuett i disfärg — belysta kullar läste som vita isberg;
+		# en fjärran udde är i praktiken bara en plattare, mörkare himmelston
+		mm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		var col := Color(0.38, 0.46, 0.54).lerp(Color(0.62, 0.69, 0.77), haze)
 		mm.albedo_color = col
-		mm.roughness = 1.0
 		m.material_override = mm
-		m.position = Vector3(dist * sin(ang), SEA_Y + hgt * 0.5 - 0.15, dist * cos(ang))
+		m.position = Vector3(dist * sin(ang), SEA_Y - hgt * 0.15, dist * cos(ang))
 		m.rotation.y = ang
 		add_child(m)
 
