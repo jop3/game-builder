@@ -702,6 +702,18 @@ func _build_stage() -> void:
 	_bolt.rotation = Vector3(deg_to_rad(-62.0), deg_to_rad(40.0), 0.0)
 	add_child(_bolt)
 
+	# reflektionssond: ger blöta ytor (hav + marmor) lokala reflektioner av himmel,
+	# klippa och bräde utöver ren himmelsreflektion. UPDATE_ONCE = engångsfångst
+	# (billigt; scenen fångas vid start), räcker för den subtila blöta glansen.
+	var probe := ReflectionProbe.new()
+	probe.update_mode = ReflectionProbe.UPDATE_ONCE
+	probe.size = Vector3(8.0, 3.0, 8.0)
+	probe.origin_offset = Vector3(0.0, 0.0, 0.0)
+	probe.position = Vector3(0.0, 0.25, 0.0)
+	probe.max_distance = 30.0
+	probe.interior = false
+	add_child(probe)
+
 	_build_sea()
 	_build_rock_island()
 	_build_coast()

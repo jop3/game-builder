@@ -23,8 +23,10 @@ uniform float amp = 1.0;             // global amplitud-förstärkning
 uniform float island_r = 0.62;
 uniform vec3 deep : source_color = vec3(0.012, 0.085, 0.12);
 uniform vec3 shallow : source_color = vec3(0.06, 0.30, 0.32);
+uniform vec3 shore_water : source_color = vec3(0.16, 0.52, 0.50);   // ljus turkos, grunt vatten
 uniform vec3 sky_tint : source_color = vec3(0.72, 0.80, 0.86);   // reflekterad himmel
 uniform vec3 foam_col : source_color = vec3(0.88, 0.92, 0.94);
+uniform float shore_reach = 1.3;   // hur långt ut det grunda ljusnar
 
 varying vec3 v_wpos;
 varying vec3 v_normal;
@@ -86,13 +88,18 @@ void fragment() {
 	float fres = 0.02 + 0.98 * pow(1.0 - clamp(dot(rn, V), 0.0, 1.0), 5.0);
 
 	// grundfärg: mörka vågdalar → ljusare toppar, sedan himmelstint via Fresnel
+	float dd = length(v_wpos.xz);
 	float facing = clamp(rn.y, 0.0, 1.0);
 	vec3 water = mix(deep, shallow, facing * 0.55 + v_fold * 0.45);
+	// GRUNT VATTEN: närmare ön ljusnar det mot turkos (djup-fejk via avstånd),
+	// bruten kant så det inte blir en jämn ring
+	float shallowness = smoothstep(island_r + shore_reach, island_r + 0.04, dd)
+	                  * (0.7 + 0.3 * fbm2(rp * 5.0));
+	water = mix(water, shore_water, shallowness * 0.7);
 	water = mix(water, sky_tint, fres * 0.5);
 
 	// skum där topparna viker sig (fold) + bruten strandkrage
 	float capfoam = smoothstep(0.32, 0.72, v_fold) * (0.5 + 0.5 * fbm2(rp * 11.0 - t * 0.15));
-	float dd = length(v_wpos.xz);
 	float shore = smoothstep(island_r + 0.24, island_r - 0.02, dd)
 	            * smoothstep(island_r - 0.20, island_r - 0.02, dd)
 	            * (0.5 + 0.5 * fbm2(rp * 12.0 + t * 0.6));
