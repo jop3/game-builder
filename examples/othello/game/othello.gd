@@ -60,11 +60,13 @@ var _win_fired := false
 var _cam: Camera3D
 var _elapsed := 0.0        # total speltid (deterministisk, dt-summerad)
 var _play_dur := 1.0       # partiets speltid i sekunder (utom END_HOLD)
-const CAM_CENTER := Vector3(0.0, 0.015, 0.0)
-const CAM_EL_TOP := 87.0   # ° elevation vid start (nästan rakt ovanför)
-const CAM_EL_END := 32.0   # ° elevation vid landning (låg sidovy → havet syns)
-const CAM_D_TOP := 1.0     # kameraavstånd uppe
-const CAM_D_END := 0.98    # kameraavstånd nere (tillbakadragen så horisonten ryms)
+const LIFT := 0.5          # brädet lyft upp på pelarpiedestalen
+const SHOW_TRAYS := false  # ö-arenan: brädet ensamt på piedestalen (som referensen)
+const CAM_CENTER := Vector3(0.0, 0.34, 0.0)   # mellan brädet (~0.5) och vattnet
+const CAM_EL_TOP := 86.0   # ° elevation vid start (nästan rakt ovanför)
+const CAM_EL_END := 22.0   # ° elevation vid landning (låg → havet + horisont bakom)
+const CAM_D_TOP := 1.25    # kameraavstånd uppe
+const CAM_D_END := 1.30    # kameraavstånd nere (tillbakadragen så horisonten ryms)
 const CAM_SPINS := 1.5     # antal varv runt bordet under nedstigningen
 
 # --- drama vid stora vändningskaskader ---
@@ -236,7 +238,29 @@ func _spawn_puff(p: Vector3, seedv: int) -> void:
 	var ang: float = _nrand(seedv * 3 + 1) * PI
 	var spd: float = 0.07 + 0.06 * absf(_nrand(seedv * 3 + 5))
 	var vel := Vector3(cos(ang) * spd, 0.11 + 0.05 * absf(_nrand(seedv * 3 + 9)), sin(ang) * spd)
-	_puffs.append({"n": mi, "m": m, "t": 0.0, "dur": 0.55 + 0.3 * absf(_nrand(seedv)), "vel": vel})
+	_puffs.append({"n": mi, "m": m, "t": 0.0, "dur": 0.55 + 0.3 * absf(_nrand(seedv)),
+		"vel": vel, "col": Color(0.9, 0.92, 0.96), "a0": 0.65})
+
+# ett vitt skumstänk vid klippkanten som slungas upp/utåt (fejkad krossande våg)
+func _spawn_spray(seedv: int) -> void:
+	var a: float = _nrand(seedv * 7 + 3) * PI
+	var rr: float = ISLAND_R * (0.92 + 0.12 * absf(_nrand(seedv * 7 + 11)))
+	var mi := MeshInstance3D.new()
+	var q := QuadMesh.new(); q.size = Vector2(0.06, 0.06)
+	mi.mesh = q
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	m.albedo_texture = _puff_tex
+	mi.material_override = m
+	mi.position = Vector3(rr * sin(a), SEA_Y + 0.02, rr * cos(a))
+	add_child(mi)
+	var up: float = 0.32 + 0.22 * absf(_nrand(seedv * 7 + 17))   # slungas uppåt
+	var out: float = 0.06 + 0.05 * absf(_nrand(seedv * 7 + 23))
+	var vel := Vector3(sin(a) * out, up, cos(a) * out)
+	_puffs.append({"n": mi, "m": m, "t": 0.0, "dur": 0.5 + 0.25 * absf(_nrand(seedv * 7 + 5)),
+		"vel": vel, "col": Color(0.95, 0.97, 1.0), "a0": 0.85})
 
 # animera alla dramaeffekter för hand (deterministiskt, drivet av dt)
 func _update_fx(dt: float) -> void:
@@ -269,9 +293,13 @@ func _update_fx(dt: float) -> void:
 		var sc: float = 1.0 + 2.2 * k3
 		mi.scale = Vector3(sc, sc, sc)
 		var mm: StandardMaterial3D = pf.m
-		mm.albedo_color = Color(0.9, 0.92, 0.96, 0.65 * (1.0 - k3) * (1.0 - k3))
+		var bc: Color = pf.col
+		mm.albedo_color = Color(bc.r, bc.g, bc.b, pf.a0 * (1.0 - k3) * (1.0 - k3))
 		alive.append(pf)
 	_puffs = alive
+	# kontinuerligt skum/stänk där vågorna slår mot klippan (fejkat, dt-drivet)
+	if _frame % 2 == 0:
+		_spawn_spray(_frame)
 	# blixt: en snabb dubbelblink-envelope som lyser upp scen + himmel
 	if _bolt_t < _bolt_dur:
 		_bolt_t += dt
@@ -338,6 +366,7 @@ func _rel_xform(root: Node3D, child: Node3D) -> Transform3D:
 func _load_assets() -> void:
 	_board_root = _load_glb(_board_glb)
 	add_child(_board_root)
+	_board_root.position.y = LIFT      # lyft brädet upp på piedestalen
 	var ab := _aabb(_board_root)
 	var bw: float = min(ab.size.x, ab.size.z)          # board footprint (X/Z plane, Y up in Godot)
 	_bw = bw
@@ -352,9 +381,10 @@ func _load_assets() -> void:
 	_disc_h = _aabb(_disc_proto).size.y            # for a center-pivot flip
 
 func _build_trays() -> void:
-	# Two side trays holding the reserve discs as a HORIZONTAL ROLL lying in the
-	# tray channel (discs on edge, axis along Z), not a standing column -- their
-	# rims read as a striped black/white roll, like the real set.
+	# I ö-arenan står brädet ensamt på piedestalen (som referensen) — inga
+	# sidofack. Behåll koden men hoppa över den.
+	if not SHOW_TRAYS:
+		return
 	var half := _bw / 2.0
 	var rad := _aabb(_disc_proto).size.x / 2.0     # disc radius
 	var n := 16
@@ -565,48 +595,50 @@ func _build_stage() -> void:
 	e.background_mode = Environment.BG_SKY
 	e.sky = sky
 	e.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	e.ambient_light_sky_contribution = 0.6
-	e.ambient_light_color = Color(0.40, 0.44, 0.52)
-	e.ambient_light_energy = 0.22
+	e.ambient_light_sky_contribution = 0.8
+	e.ambient_light_color = Color(0.62, 0.70, 0.82)
+	e.ambient_light_energy = 0.55          # ljus dagsljus-ambient
 	e.tonemap_mode = Environment.TONE_MAPPER_AGX
-	e.tonemap_white = 1.5
+	e.tonemap_white = 2.0
 	e.fog_enabled = true
-	e.fog_light_color = Color(0.34, 0.37, 0.43)
-	e.fog_density = 0.045
+	e.fog_light_color = Color(0.70, 0.76, 0.82)   # ljus dis (dagsljus) → havet smälter in
+	e.fog_density = 0.05
 	e.fog_sky_affect = 0.0                 # låt shader-himlen stå för horisonten
 	e.glow_enabled = true
-	e.glow_intensity = 0.10
-	e.glow_bloom = 0.05
+	e.glow_intensity = 0.12
+	e.glow_bloom = 0.06
 	env.environment = e
 	add_child(env)
 
-	# Överdimmig nyckel: sval, mjuk, uppifrån-sidan; måttlig energi så marmorn
-	# lyser men det svarta hålls svart.
+	# Dagsljus-sol: ljus, en aning varm, mjuka skuggor uppifrån-sidan.
 	var key := DirectionalLight3D.new()
-	key.light_color = Color(0.82, 0.87, 0.98)
-	key.light_energy = 1.35
-	key.light_angular_distance = 3.0
+	key.light_color = Color(1.0, 0.97, 0.90)
+	key.light_energy = 2.4
+	key.light_angular_distance = 2.0
 	key.shadow_enabled = true
-	key.rotation = Vector3(deg_to_rad(-56.0), deg_to_rad(-34.0), 0.0)
+	key.rotation = Vector3(deg_to_rad(-52.0), deg_to_rad(-38.0), 0.0)
 	add_child(key)
-	# sval fill från kamerahållet så skuggorna inte kvävs till becksvart
+	# himmelsblå fill från kamerahållet
 	var fill := OmniLight3D.new()
-	fill.light_color = Color(0.72, 0.80, 0.95)
-	fill.light_energy = 0.30
-	fill.omni_range = 4.0
-	fill.position = Vector3(0.05, 0.5, 0.7)
+	fill.light_color = Color(0.70, 0.80, 0.95)
+	fill.light_energy = 0.40
+	fill.omni_range = 5.0
+	fill.position = Vector3(0.1, 0.8, 1.0)
 	add_child(fill)
 
 	# blixtljus (mörkt tills det slår till), riktat snett uppifrån
 	_bolt = DirectionalLight3D.new()
-	_bolt.light_color = Color(0.90, 0.95, 1.0)
+	_bolt.light_color = Color(0.92, 0.96, 1.0)
 	_bolt.light_energy = 0.0
 	_bolt.rotation = Vector3(deg_to_rad(-62.0), deg_to_rad(40.0), 0.0)
 	add_child(_bolt)
 
 	_build_sea()
-	_build_island()
-	_build_colonnade()
+	_build_rock_island()
+	_build_pedestal()
+	_build_coast()
+	if _sea_mat:
+		_sea_mat.set_shader_parameter("island_r", ISLAND_R)
 
 	_cam = Camera3D.new()
 	_cam.fov = 60
@@ -630,57 +662,78 @@ func _build_sea() -> void:
 # liten klippö med marmortopp som brädet och kolonnerna står på. Klippans topp
 # ligger UNDER marmorplattans undersida (ingen koplanär yta → inget z-fight), och
 # marmortoppen ligger en aning under brädets underkant.
-func _build_island() -> void:
-	# våt mörk klippa: toppen vid y=-0.05, gömd inuti marmorplattan
-	var rock := MeshInstance3D.new()
-	var cyl := CylinderMesh.new()
-	cyl.top_radius = ISLAND_R
-	cyl.bottom_radius = ISLAND_R * 1.2
-	var rock_top := -0.05
-	cyl.height = rock_top - (SEA_Y - 0.2)
-	cyl.radial_segments = 40
-	rock.mesh = cyl
-	var rm := StandardMaterial3D.new()
-	rm.albedo_color = Color(0.09, 0.10, 0.11)
-	rm.roughness = 0.9
-	rock.material_override = rm
-	rock.position = Vector3(0.0, (SEA_Y - 0.2 + rock_top) / 2.0, 0.0)
-	add_child(rock)
-	# marmorplatta i toppen: spänner [-0.10, -0.006] (omsluter klipptoppen vid
-	# -0.05, topp strax under brädets underkant vid y≈0)
-	var top := MeshInstance3D.new()
-	var tc := CylinderMesh.new()
-	tc.top_radius = ISLAND_R * 1.06
-	tc.bottom_radius = ISLAND_R * 0.98
-	tc.height = 0.094
-	tc.radial_segments = 48
-	top.mesh = tc
-	var tm := StandardMaterial3D.new()
-	tm.albedo_color = Color(0.80, 0.79, 0.74)
-	tm.roughness = 0.4
-	top.material_override = tm
-	top.position = Vector3(0.0, -0.053, 0.0)
-	add_child(top)
+# en knölig klippö (vertex-förskjuten sfär via rock.gdshader) med ett par mindre
+# klippblock vid vattenlinjen — en ojämn skärgårdsklack, inte en slät skiva
+func _build_rock_island() -> void:
+	var mat := ShaderMaterial.new()
+	mat.shader = load("res://rock.gdshader")
+	mat.set_shader_parameter("waterline", SEA_Y)
+	# huvudklacken: tillplattad sfär, topp ~y=0 (piedestalens fot), bred fot i havet
+	var main := MeshInstance3D.new()
+	var sm := SphereMesh.new()
+	sm.radius = ISLAND_R
+	sm.height = ISLAND_R * 1.5
+	sm.radial_segments = 64
+	sm.rings = 32
+	main.mesh = sm
+	main.material_override = mat
+	main.scale = Vector3(1.0, 0.62, 1.0)
+	main.position = Vector3(0.0, -0.30, 0.0)
+	add_child(main)
+	# några mindre klippblock runt foten för en taggig silhuett
+	for i in 5:
+		var a := TAU * float(i) / 5.0 + 0.5
+		var r := ISLAND_R * (0.7 + 0.25 * absf(_nrand(i * 5 + 2)))
+		var chunk := MeshInstance3D.new()
+		var cs := SphereMesh.new()
+		cs.radius = ISLAND_R * (0.28 + 0.12 * absf(_nrand(i * 5 + 7)))
+		cs.height = cs.radius * 1.8
+		cs.radial_segments = 32
+		cs.rings = 16
+		chunk.mesh = cs
+		chunk.material_override = mat
+		chunk.scale = Vector3(1.0, 0.7, 1.0)
+		chunk.position = Vector3(r * sin(a), SEA_Y + 0.02 + 0.05 * _nrand(i), r * cos(a))
+		add_child(chunk)
 
-# ring av marmorkolonner runt brädet — glesad vid framsidan (az=0) så
-# slutvyn av brädet blir fri
-func _build_colonnade() -> void:
+# EN central marmorpelare som piedestal: brädet vilar på kapitälet (brädet är
+# lyft LIFT). Skalas så toppen når brädets underkant.
+func _build_pedestal() -> void:
 	var col := _load_glb(_col_glb)
 	if col == null:
 		return
 	col.visible = false
 	add_child(col)
 	var h := _aabb(col).size.y
-	var target_h := 0.92
-	var sc := target_h / maxf(h, 0.001)
-	for phi_deg in [55.0, 100.0, 145.0, 180.0, 215.0, 260.0, 305.0]:
-		var phi := deg_to_rad(phi_deg)
-		var inst: Node3D = col.duplicate()
-		inst.visible = true
-		inst.scale = Vector3(sc, sc, sc)
-		inst.position = Vector3(COL_R * sin(phi), 0.0, COL_R * cos(phi))
-		inst.rotation.y = _nrand(int(phi_deg)) * 0.15   # liten slumpvinkel
-		add_child(inst)
+	var sc := (LIFT + 0.05) / maxf(h, 0.001)
+	var inst: Node3D = col.duplicate()
+	inst.visible = true
+	inst.scale = Vector3(sc, sc, sc)
+	inst.position = Vector3(0.0, 0.0, 0.0)    # fot på klipptoppen (~y=0)
+	add_child(inst)
+
+# avlägsen kustlinje: några låga, mörka, disiga uddar nära horisonten (fog gör
+# dem atmosfäriskt bleka), utspridda på fjärran sidorna som i referensen
+func _build_coast() -> void:
+	var pts := [
+		[16.0, -60.0, 1.1, 5.0], [20.0, -110.0, 1.6, 8.0],
+		[18.0, 150.0, 0.9, 6.0], [22.0, 120.0, 1.3, 7.0],
+	]
+	for p in pts:
+		var dist: float = p[0]
+		var ang := deg_to_rad(p[1])
+		var hgt: float = p[2]
+		var wid: float = p[3]
+		var m := MeshInstance3D.new()
+		var bx := BoxMesh.new()
+		bx.size = Vector3(wid, hgt, wid * 0.5)
+		m.mesh = bx
+		var mm := StandardMaterial3D.new()
+		mm.albedo_color = Color(0.34, 0.40, 0.47)   # disig mörk udde
+		mm.roughness = 1.0
+		m.material_override = mm
+		m.position = Vector3(dist * sin(ang), SEA_Y + hgt * 0.5 - 0.1, dist * cos(ang))
+		add_child(m)
 
 # Spiralnedstigning: elevationen sjunker mjukt från nästan rakt ovanför till en
 # fin sidovy medan azimuten snurrar CAM_SPINS varv och bromsar in i sluts läget.
