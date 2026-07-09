@@ -718,8 +718,8 @@ func _build_sea() -> void:
 	var sea := MeshInstance3D.new()
 	var pm := PlaneMesh.new()
 	pm.size = Vector2(60.0, 60.0)
-	pm.subdivide_width = 140
-	pm.subdivide_depth = 140
+	pm.subdivide_width = 200        # tätare → Gerstner-vågorna löser upp sig nära ön
+	pm.subdivide_depth = 200
 	sea.mesh = pm
 	_sea_mat = ShaderMaterial.new()
 	_sea_mat.shader = load("res://sea.gdshader")
