@@ -25,6 +25,7 @@ PARAM_SCHEMA = {
         "flute_depth": {"type": "number", "minimum": 0.02, "maximum": 0.12, "default": 0.06},
         "taper": {"type": "number", "minimum": 0.7, "maximum": 1.0, "default": 0.84},
         "rings": {"type": "integer", "minimum": 10, "maximum": 28, "default": 18},
+        "capital_style": {"enum": ["doric", "ionic"], "default": "doric"},
         "materials": {"type": "array", "items": {"type": "string"}},
     },
     "additionalProperties": False,
@@ -39,7 +40,7 @@ BBOX_RANGE = {"min": [0.5, 0.5, 2.2], "max": [1.2, 1.2, 3.8]}
 
 def generate(params: dict, rng, theme: dict):
     import bmesh
-    from mathutils import Vector
+    from mathutils import Matrix, Vector
 
     from assetpipe.generators import common
 
@@ -99,13 +100,33 @@ def generate(params: dict, rng, theme: dict):
         bmesh.ops.scale(bm, verts=c["verts"], vec=(sx, sy, h))
         bmesh.ops.translate(bm, verts=c["verts"], vec=(0.0, 0.0, zc))
 
-    # base: square plinth, then a round base flaring up into the shaft
+    def add_scroll(width: float, rad: float, zc: float):
+        # a horizontal roll (axis along X): reads as an Ionic bolster from the
+        # side and as two round scroll ends from the front
+        c = bmesh.ops.create_cone(bm, cap_ends=True, cap_tris=True, segments=seg // 2,
+                                  radius1=rad, radius2=rad, depth=width)
+        bmesh.ops.rotate(bm, verts=c["verts"], cent=(0.0, 0.0, 0.0),
+                         matrix=Matrix.Rotation(math.pi / 2.0, 3, "Y"))
+        bmesh.ops.translate(bm, verts=c["verts"], vec=(0.0, 0.0, zc))
+
+    # base: square plinth, then a round base flaring up into the shaft.
+    # (Every stacked part must differ in radius OR z at any shared plane by
+    # >> 1e-5, else remove_doubles welds coincident rims into non-manifold
+    # edges. Parts interpenetrate on purpose -- S9 self-intersection is a warn.)
     add_box(R * 3.0, R * 3.0, base_h * 0.42, base_h * 0.21)
     add_cyl(R * 1.4, R * 1.08, base_h * 0.62, base_h * 0.42 + base_h * 0.31)
 
-    # capital: round echinus flaring out of the shaft top, square abacus slab
-    add_cyl(r_top * 1.02, R * 1.32, cap_h * 0.55, z1 + cap_h * 0.275)
-    add_box(R * 3.0, R * 3.0, cap_h * 0.45, z1 + cap_h * 0.55 + cap_h * 0.225)
+    if params["capital_style"] == "ionic":
+        # Ionic: a collar sleeved over the shaft top (wider radius, so it
+        # interpenetrates rather than sharing the shaft's rim), a horizontal
+        # scroll bolster, and a thin abacus slab.
+        add_cyl(r_top * 1.06, r_top * 1.06, cap_h * 0.32, z1 + cap_h * 0.06)
+        add_scroll(R * 2.7, cap_h * 0.30, z1 + cap_h * 0.40)
+        add_box(R * 2.9, R * 1.7, cap_h * 0.20, z1 + cap_h * 0.64)
+    else:
+        # Doric: round echinus flaring out of the shaft top, square abacus slab
+        add_cyl(r_top * 1.02, R * 1.32, cap_h * 0.55, z1 + cap_h * 0.275)
+        add_box(R * 3.0, R * 3.0, cap_h * 0.45, z1 + cap_h * 0.55 + cap_h * 0.225)
 
     for f in bm.faces:
         f.material_index = 0

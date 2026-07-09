@@ -6,10 +6,11 @@
     "theme": "greek_arena",
     "platform_profile": "desktop_mid",
     "seed": 9101,
-    "description": "A tall fluted white marble Greek column: a square plinth base, a slender fluted shaft with gentle entasis taper, and a Doric capital (round echinus and square abacus), weathered ancient stone",
+    "description": "A tall fluted white marble Greek column: a stepped plinth base, a slender fluted shaft with gentle entasis taper, and an Ionic capital with a scroll bolster and thin abacus, weathered ancient stone",
     "generator": "env/column",
     "param_overrides": {
-      "materials": ["marble_white"]
+      "materials": ["marble_white"],
+      "capital_style": "ionic"
     },
     "topology": "closed",
     "lods": "none",
