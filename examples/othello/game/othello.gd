@@ -368,6 +368,9 @@ func _load_assets() -> void:
 	_board_root = _load_glb(_board_glb)
 	add_child(_board_root)
 	_board_root.position.y = LIFT      # lyft brädet upp på piedestalen
+	# OBS: _aabb() räknar i brädets LOKALA rum (den stannar vid roten och tar
+	# inte med rotens egen position), så LIFT måste adderas till Y-höjden för
+	# att brickorna ska hamna PÅ brädet, inte vid piedestalens fot.
 	var ab := _aabb(_board_root)
 	var bw: float = min(ab.size.x, ab.size.z)          # board footprint (X/Z plane, Y up in Godot)
 	_bw = bw
@@ -375,7 +378,7 @@ func _load_assets() -> void:
 	_cy = ab.position.z + ab.size.z * 0.5
 	var play := bw - 2.0 * _border
 	_cell = play / 8.0
-	_surf_z = ab.position.y + ab.size.y - 0.004        # wood surface, just under the grid tops
+	_surf_z = LIFT + ab.position.y + ab.size.y - 0.004  # brädets yta i världs-Y
 	_disc_proto = _load_glb(_disc_glb)
 	_disc_proto.visible = false
 	add_child(_disc_proto)
