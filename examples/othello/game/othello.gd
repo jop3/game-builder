@@ -299,9 +299,8 @@ func _update_fx(dt: float) -> void:
 		mm.albedo_color = Color(bc.r, bc.g, bc.b, pf.a0 * (1.0 - k3) * (1.0 - k3))
 		alive.append(pf)
 	_puffs = alive
-	# kontinuerligt skum/stänk där vågorna slår mot klippan (fejkat, dt-drivet)
-	if _frame % 6 == 0:
-		_spawn_spray(_frame)
+	# skummet vid vattenlinjen sköts av havs-shaderns skumkrage (billboard-stänk
+	# skymde piedestalen). _spawn_spray finns kvar men anropas inte.
 	# blixt: en snabb dubbelblink-envelope som lyser upp scen + himmel
 	if _bolt_t < _bolt_dur:
 		_bolt_t += dt
@@ -598,8 +597,8 @@ func _build_stage() -> void:
 	e.sky = sky
 	e.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	e.ambient_light_sky_contribution = 0.8
-	e.ambient_light_color = Color(0.62, 0.70, 0.82)
-	e.ambient_light_energy = 0.55          # ljus dagsljus-ambient
+	e.ambient_light_color = Color(0.60, 0.68, 0.80)
+	e.ambient_light_energy = 0.38          # dagsljus men ej utfrätt
 	e.tonemap_mode = Environment.TONE_MAPPER_FILMIC   # punchigare färg än AgX (havet blir blågrönt)
 	e.tonemap_white = 1.6
 	e.fog_enabled = true
@@ -612,8 +611,8 @@ func _build_stage() -> void:
 
 	# Dagsljus-sol: ljus, en aning varm, mjuka skuggor uppifrån-sidan.
 	var key := DirectionalLight3D.new()
-	key.light_color = Color(1.0, 0.97, 0.90)
-	key.light_energy = 2.4
+	key.light_color = Color(1.0, 0.96, 0.88)
+	key.light_energy = 1.5                 # dämpad så marmorns ådring/flöjlar syns (ej vitutfrätt)
 	key.light_angular_distance = 2.0
 	key.shadow_enabled = true
 	key.rotation = Vector3(deg_to_rad(-52.0), deg_to_rad(-38.0), 0.0)

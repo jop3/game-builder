@@ -54,9 +54,9 @@ void fragment() {
 	float crest = smoothstep(0.12, 0.55, v_h) * smoothstep(0.28, 0.62, fnoise);
 	// skumkrage där havet bryter mot ön
 	float d = length(v_wpos.xz);
-	float shore = smoothstep(island_r + 0.14, island_r - 0.02, d)
-	            * smoothstep(island_r - 0.16, island_r - 0.04, d)
-	            * (0.55 + 0.45 * vnoise(v_wpos.xz * 10.0 + t * 0.6));
+	float shore = smoothstep(island_r + 0.24, island_r - 0.02, d)
+	            * smoothstep(island_r - 0.20, island_r - 0.02, d)
+	            * (0.65 + 0.35 * vnoise(v_wpos.xz * 10.0 + t * 0.6));
 	float foam = clamp(max(crest, shore), 0.0, 1.0);
 
 	vec3 col = mix(deep, shallow, clamp(v_h * 0.5 + 0.5, 0.0, 1.0));
