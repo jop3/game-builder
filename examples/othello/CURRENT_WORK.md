@@ -205,13 +205,19 @@ pedestal a single column at origin.
 
 ## Open ideas / possible next steps (not started)
 
-- Sea: true transparency/refraction at the immediate waterline (see into the shallows);
-  currently depth-faked by distance to shore.
-- Crashing spray: animated billboard bursts where big folds meet the shore ring
-  (the reference has explosive white surf; `_spawn_spray` exists but is unused
-  because it occluded the pedestal — a fold-gated, low-height version could work).
+Kvarvarande gap mot referensen (i prioritetsordning):
+- **Brädramen**: referensens ram är mörkare och ORNAMENTERAD (diamant-/
+  meanderinläggningar). Vår brons är slät — ett `greek key`-mönster i
+  bronze_trim (världs-UV-driven bandtextur) eller geometriska inlägg i
+  game_board-generatorn vore nästa kliv.
+- **Pelaren**: volutspiralerna (jonisk snäcka) syns knappt från filmvinkeln —
+  större bolsterradie i env/column; plus vertikala vittringsstråk (dripstains)
+  i marble_white.
+- **Bränningarna**: fortfarande diskreta; referensens explosiva vitvatten
+  behöver större/fler puffar nära kameran eller ett skum-sprite-ark.
+- Sea: true transparency/refraction at the immediate waterline (see into the
+  shallows); currently depth-faked by distance to shore.
 - Sky: bolder sculpted cumulus (current fbm cover is decent but soft).
-- Marble: dominant directional grain; even-blacker discs with clearcoat.
 - Human-vs-bot input mode; SFX hit-stop on flips.
 - envkit: give it its own tiny demo scene + golden-image test so the kit can be
   verified without the othello example.
