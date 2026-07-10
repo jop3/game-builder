@@ -231,6 +231,23 @@ def cmd_report(args) -> int:
     return 0
 
 
+def cmd_texlib(args) -> int:
+    """Pinned CC0 external-asset library: list cache state or fetch+verify."""
+    from assetpipe import texlib
+
+    manifest = texlib.load_manifest()
+    if args.action == "list":
+        for asset_id, entry in manifest.items():
+            state = "cached" if texlib.is_cached(asset_id, entry) else "-"
+            print(f"{asset_id:36s} {entry['kind']:4s} {entry['license']:8s} "
+                  f"{state:6s} {entry['credit']}")
+        return 0
+    fetched = texlib.fetch(args.ids or None)
+    for asset_id, path in fetched.items():
+        print(f"OK {asset_id} -> {path}")
+    return 0
+
+
 # ---------------------------------------------------------------------------
 # Wiring
 # ---------------------------------------------------------------------------
@@ -356,6 +373,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--run", required=True)
     p.add_argument("--verbose", action="store_true")
     p.set_defaults(fn=cmd_report)
+
+    p = sub.add_parser("texlib", help="pinned CC0 texture/HDRI library (list/fetch)")
+    p.add_argument("action", choices=["list", "fetch"])
+    p.add_argument("ids", nargs="*", help="asset ids (default: all)")
+    p.set_defaults(fn=cmd_texlib)
 
     return parser
 

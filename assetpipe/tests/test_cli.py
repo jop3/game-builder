@@ -24,8 +24,10 @@ def fake_blender(tmp_path):
 def test_parser_covers_all_spec_20_2_commands():
     parser = build_parser()
     sub = next(a for a in parser._actions if a.dest == "command")
+    # spec 20.2-kommandona + texlib (pinnat CC0-bibliotek, ett medvetet tillägg)
     assert set(sub.choices) == {"generate", "batch", "validate", "render",
-                                "inspect", "deliver", "resume", "report"}
+                                "inspect", "deliver", "resume", "report",
+                                "texlib"}
 
 
 def test_validate_passes_good_glb(tmp_path, capsys):

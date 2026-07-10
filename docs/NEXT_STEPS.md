@@ -29,6 +29,10 @@ Container facts the script encodes (don't rediscover these):
 - 4 CPU cores, no GPU: a 1024² bake ≈ 2 min, the render view set ≈ 4 min.
   Give bake/render generous `stage_timeouts` in test configs (the spec's
   600 s default is tight for the AO pass on this hardware).
+- **ambientcg.com and dl.polyhaven.org ARE reachable** through the proxy
+  (verified 2026-07-10) — `python -m assetpipe texlib fetch` pulls the pinned
+  CC0 photo-scan sets + HDRIs into `texlib_cache/` for hybrid material
+  recipes (see `assetpipe/README.md` "External assets").
 
 Smoke commands once the toolchain is up (drive them from a scratch dir;
 each run writes a self-contained run dir with `history.jsonl`):

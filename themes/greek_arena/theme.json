@@ -14,7 +14,8 @@
     "wood_ancient",
     "bronze_trim",
     "piece_ivory",
-    "piece_basalt"
+    "piece_basalt",
+    "stone_travertine"
   ],
   "silhouette_language": "Classical Greek architecture and artefacts: tall fluted marble columns with a square plinth base and a carved capital, dark aged wood, cast bronze fittings, polished stone game pieces — clean carved ancient forms.",
   "wear_range": [0.0, 0.35],

@@ -1,0 +1,74 @@
+[
+  {
+    "id": "marble_polished_012",
+    "kind": "pbr",
+    "source": "ambientCG",
+    "url": "https://ambientcg.com/get?file=Marble012_1K-JPG.zip",
+    "sha256": "b04384c6d49ce73baeb70db7ea4abfe9948fc9b74b9fd92c3766970662bf2c43",
+    "license": "CC0-1.0",
+    "credit": "ambientCG.com (Marble012)",
+    "tags": ["marble", "stone", "polished", "white"]
+  },
+  {
+    "id": "travertine_009",
+    "kind": "pbr",
+    "source": "ambientCG",
+    "url": "https://ambientcg.com/get?file=Travertine009_1K-JPG.zip",
+    "sha256": "09fa1ce1cd590e87ed4053864ebaf0186718fba6373559a8458eb4fa6146fdb7",
+    "license": "CC0-1.0",
+    "credit": "ambientCG.com (Travertine009)",
+    "tags": ["travertine", "stone", "porous", "warm", "greek"]
+  },
+  {
+    "id": "rock_cliff_063",
+    "kind": "pbr",
+    "source": "ambientCG",
+    "url": "https://ambientcg.com/get?file=Rock063_1K-JPG.zip",
+    "sha256": "e2974a91631ea872cf0ecfc3755650c970ef0e6bf4fed5777847e63884319656",
+    "license": "CC0-1.0",
+    "credit": "ambientCG.com (Rock063)",
+    "tags": ["rock", "cliff", "rough", "outdoor"]
+  },
+  {
+    "id": "wood_dark_051",
+    "kind": "pbr",
+    "source": "ambientCG",
+    "url": "https://ambientcg.com/get?file=Wood051_1K-JPG.zip",
+    "sha256": "debf3d60f69a09c30613dc95a94da49c8116160ab8a29f77ac8e32cc33f1a1c3",
+    "license": "CC0-1.0",
+    "credit": "ambientCG.com (Wood051)",
+    "tags": ["wood", "dark", "grain", "plank"]
+  },
+  {
+    "id": "metal_worn_008",
+    "kind": "pbr",
+    "source": "ambientCG",
+    "url": "https://ambientcg.com/get?file=Metal008_1K-JPG.zip",
+    "sha256": "d8f6b8492944cfdcb9044016b7a73f2a7e7d8c36009778585bd2f88570ca0ba2",
+    "license": "CC0-1.0",
+    "credit": "ambientCG.com (Metal008)",
+    "tags": ["metal", "worn", "bronze", "scuffed"]
+  },
+  {
+    "id": "hdri_studio_small_09",
+    "kind": "hdri",
+    "source": "Poly Haven",
+    "url": "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_small_09_1k.hdr",
+    "sha256": "e7cfda5f4e98e623db12b8bfd0184e048488e4855d9c83e2751fb44a32e80c45",
+    "license": "CC0-1.0",
+    "credit": "Poly Haven (studio_small_09)",
+    "file": "studio_small_09_1k.hdr",
+    "tags": ["hdri", "studio", "neutral", "L1"]
+  },
+  {
+    "id": "hdri_kloofendal_partly_cloudy",
+    "kind": "hdri",
+    "source": "Poly Haven",
+    "url": "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/kloofendal_48d_partly_cloudy_puresky_1k.hdr",
+    "sha256": "fd94c84997b8a3c353b62c2125a9b44e19509956986a126e472684432a02d798",
+    "license": "CC0-1.0",
+    "credit": "Poly Haven (kloofendal_48d_partly_cloudy_puresky)",
+    "file": "kloofendal_48d_partly_cloudy_puresky_1k.hdr",
+    "tags": ["hdri", "outdoor", "daylight", "sky"]
+  }
+]

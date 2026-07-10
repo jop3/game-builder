@@ -152,6 +152,17 @@ def setup_lighting_rig(rig_id: str) -> None:
 
     if rig_id == "L1":
         bg.inputs["Strength"].default_value = 1.0
+        # OPT-IN: en riktig studio-HDRI (texlib: hdri_studio_small_09) i stället
+        # för den platta vita domen -- markant bättre materialavläsning (R7:
+        # metaller får riktningar att spegla). Env-var i stället för default:
+        # att byta L1 ändrar ALLA framtida V2-verdikt, så bytet ska göras
+        # medvetet ihop med en golden-set-rebaseline (doktrin §1), inte tyst.
+        import os
+        hdri_path = os.environ.get("ASSETPIPE_L1_HDRI")
+        if hdri_path and Path(hdri_path).exists():
+            env_node = world.node_tree.nodes.new("ShaderNodeTexEnvironment")
+            env_node.image = bpy.data.images.load(hdri_path, check_existing=True)
+            world.node_tree.links.new(env_node.outputs["Color"], bg.inputs["Color"])
     elif rig_id == "L2":
         bg.inputs["Strength"].default_value = 0.1
         rig = views.LIGHTING_RIGS["L2"]

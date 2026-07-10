@@ -33,7 +33,9 @@ python3 -m pytest assetpipe/tests    # 415 tests, no Blender/Godot/network
 | `orchestrator.py` | §16.5, §17, §20 | `run_batch` / `resume_run`: intake → parallel per-asset loops → final/ + manifest + diagnosis |
 | `diagnosis.py` | §16.6 | Machine-written `diagnosis.md` for best-effort assets |
 | `adapters/` | §18–§19 | `EngineAdapter` protocol + Godot adapter (deliver/verify, bundled `.gd` scripts) |
-| `cli.py` (`python -m assetpipe`) | §20.2 | generate, batch, validate, render, inspect, deliver, resume, report |
+| `cli.py` (`python -m assetpipe`) | §20.2 | generate, batch, validate, render, inspect, deliver, resume, report, texlib |
+| `texlib/` | — | Pinned CC0 external-asset library (ambientCG PBR sets + Poly Haven HDRIs): sha256-verified fetch to a gitignored cache, `resolve()` for recipes |
+| `matlib/imagesets.py` | — | Bridge: wire a texlib PBR set into a recipe node tree (correct color spaces, box projection) for **hybrid recipes** (photo scan + procedural wear) |
 
 ## Running it
 
@@ -58,6 +60,28 @@ watches the exchange dir inspects the images and writes the tool input to
 `call_NNNN/report.json` (see `vision/agent_client.py` for the protocol). The
 report then flows through the identical semantic validation, two-view rule,
 and uncertainty policy as an API response.
+
+### External assets (texlib)
+
+```
+python -m assetpipe texlib list     # cache state per pinned asset
+python -m assetpipe texlib fetch    # download + sha256-verify all (idempotent)
+```
+
+Curated **CC0-only** photo-scan PBR sets and HDRIs, pinned by sha256 in
+`texlib/manifest.json`, cached in `texlib_cache/` (gitignored; override with
+`ASSETPIPE_TEXLIB_CACHE`). Material recipes use them via `texlib.resolve(id)` +
+`matlib.imagesets.wire_pbr_maps(...)` and layer procedural wear on top — see
+`themes/greek_arena/materials/stone_travertine.py` for the pattern. A recipe
+whose set is missing fails loudly with the fetch hint (never a silent visual
+fallback). Both ambientcg.com and dl.polyhaven.org are reachable through the
+cloud container's egress proxy (verified 2026-07-10); GitHub is not.
+
+Opt-in harness upgrade: `ASSETPIPE_L1_HDRI=<path to .hdr>` swaps the render
+harness's flat white L1 dome for a real studio HDRI
+(`texlib_cache/hdri_studio_small_09/…`). Off by default — changing L1 shifts
+every future V2 verdict, so flip it together with a golden-set rebaseline,
+not silently.
 
 ## Test tiers (spec §21) — what runs where
 
