@@ -11,6 +11,8 @@
   },
   "materials": [
     "marble_white",
+    "marble_scan",
+    "wood_scan_dark",
     "wood_ancient",
     "bronze_trim",
     "piece_ivory",

@@ -9,7 +9,7 @@
     "description": "A thick weathered fluted white marble Greek column: a stepped plinth base, a stout fluted shaft with gentle entasis taper and deep crisp flutes, and an Ionic capital with a prominent scroll bolster and thin abacus, ancient sun-warmed stone",
     "generator": "env/column",
     "param_overrides": {
-      "materials": ["marble_white"],
+      "materials": ["marble_scan"],
       "capital_style": "ionic",
       "radius_m": 0.36,
       "flute_depth": 0.09,
