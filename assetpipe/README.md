@@ -83,6 +83,13 @@ harness's flat white L1 dome for a real studio HDRI
 every future V2 verdict, so flip it together with a golden-set rebaseline,
 not silently.
 
+**Fonts** (`kind: font`, TTF via Fontsource/jsDelivr, version-pinned +
+sha256): for carved inscriptions (Blender text→mesh in generators), game UI
+and film titles. OFL-1.1 is allowed *for fonts only*; the one obligation is
+that a game which **ships** the font file must bundle the OFL license text —
+the cache itself is never committed. Current picks: `font_cinzel` (Trajan-like
+Roman capitals — column inscriptions, titles) and `font_inter` (clean UI).
+
 ## Test tiers (spec §21) — what runs where
 
 - **Runs in CI here (pure Python):** validator truth tests on synthetic

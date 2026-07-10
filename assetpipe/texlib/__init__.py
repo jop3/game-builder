@@ -51,7 +51,15 @@ PBR_MAP_SUFFIXES = {
     "opacity": "_Opacity.jpg",
 }
 
-ALLOWED_LICENSES = {"CC0-1.0"}
+# Tillåtna licenser PER KIND. Texturer/HDRI:er: enbart CC0 (ingen kreditering,
+# inga villkor). Typsnitt: även SIL OFL-1.1 — nästan alla bra fria typsnitt är
+# OFL, och villkoret är hanterbart: skeppas typsnittet MED ett spel måste
+# OFL-licenstexten följa med (se README) — det committas aldrig hit ändå.
+ALLOWED_LICENSES = {
+    "pbr": {"CC0-1.0"},
+    "hdri": {"CC0-1.0"},
+    "font": {"CC0-1.0", "OFL-1.1"},
+}
 
 
 class TexlibError(RuntimeError):
@@ -76,12 +84,13 @@ def load_manifest(path: Path | None = None) -> dict[str, dict]:
         for field in ("id", "kind", "source", "url", "sha256", "license"):
             if field not in entry:
                 raise TexlibError(f"manifest-post saknar '{field}': {entry}")
-        if entry["kind"] not in ("pbr", "hdri"):
+        if entry["kind"] not in ("pbr", "hdri", "font"):
             raise TexlibError(f"okänd kind '{entry['kind']}' för {entry['id']}")
-        if entry["license"] not in ALLOWED_LICENSES:
+        allowed = ALLOWED_LICENSES[entry["kind"]]
+        if entry["license"] not in allowed:
             raise TexlibError(
-                f"{entry['id']}: licensen {entry['license']!r} är inte tillåten i "
-                f"texlib ({sorted(ALLOWED_LICENSES)}) -- assets med "
+                f"{entry['id']}: licensen {entry['license']!r} är inte tillåten "
+                f"för kind={entry['kind']} ({sorted(allowed)}) -- assets med "
                 f"attributionskrav hör hemma i en separat, krediterad kanal")
         if len(entry["sha256"]) != 64:
             raise TexlibError(f"{entry['id']}: sha256 ser inte ut som en pin")
@@ -155,8 +164,9 @@ def fetch(ids: list[str] | None = None, *, downloader=None,
                     zf.extractall(dest)
             finally:
                 tmp.unlink(missing_ok=True)
-        else:  # hdri: en enda .hdr-fil
-            (dest / entry.get("file", f"{asset_id}.hdr")).write_bytes(data)
+        else:  # hdri/font: en enda fil
+            default_name = f"{asset_id}.hdr" if entry["kind"] == "hdri" else f"{asset_id}.ttf"
+            (dest / entry.get("file", default_name)).write_bytes(data)
         (dest / _OK_MARKER).write_text(entry["sha256"])
         out[asset_id] = dest
     return out
@@ -175,11 +185,13 @@ def resolve(asset_id: str, *, manifest: dict[str, dict] | None = None) -> dict:
     dest = _asset_dir(asset_id)
     if not is_cached(asset_id, entry):
         raise TexlibMissing(asset_id)
-    if entry["kind"] == "hdri":
-        hdrs = sorted(dest.glob("*.hdr"))
-        if not hdrs:
-            raise TexlibError(f"{asset_id}: ingen .hdr i cachen trots ok-markör")
-        return {"kind": "hdri", "dir": dest, "file": hdrs[0]}
+    if entry["kind"] in ("hdri", "font"):
+        pattern = "*.hdr" if entry["kind"] == "hdri" else "*.[to]tf"
+        hits = sorted(dest.glob(pattern))
+        if not hits:
+            raise TexlibError(
+                f"{asset_id}: ingen {pattern}-fil i cachen trots ok-markör")
+        return {"kind": entry["kind"], "dir": dest, "file": hits[0]}
     maps: dict[str, Path] = {}
     for name, suffix in PBR_MAP_SUFFIXES.items():
         hits = sorted(dest.glob(f"*{suffix}"))

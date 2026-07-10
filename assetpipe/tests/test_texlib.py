@@ -47,10 +47,12 @@ def test_shipped_manifest_loads_and_is_pinned():
     man = texlib.load_manifest()
     assert len(man) >= 5
     for asset_id, entry in man.items():
-        assert entry["license"] == "CC0-1.0"
+        assert entry["license"] in texlib.ALLOWED_LICENSES[entry["kind"]]
         assert len(entry["sha256"]) == 64
-        assert entry["kind"] in ("pbr", "hdri")
+        assert entry["kind"] in ("pbr", "hdri", "font")
         assert entry["url"].startswith("https://")
+        if entry["license"] != "CC0-1.0":     # villkorade licenser bara för typsnitt
+            assert entry["kind"] == "font"
 
 
 def test_manifest_rejects_non_cc0(tmp_path):
@@ -60,6 +62,31 @@ def test_manifest_rejects_non_cc0(tmp_path):
     p.write_text(json.dumps(bad))
     with pytest.raises(texlib.TexlibError, match="licens"):
         texlib.load_manifest(p)
+
+
+def test_ofl_allowed_only_for_fonts(tmp_path):
+    # OFL är ok för typsnitt...
+    ok = [{"id": "f", "kind": "font", "source": "s", "url": "https://u",
+           "sha256": "0" * 64, "license": "OFL-1.1"}]
+    p = tmp_path / "ok.json"
+    p.write_text(json.dumps(ok))
+    assert "f" in texlib.load_manifest(p)
+    # ...men inte för texturer (attributions-/villkorskanal hålls separat)
+    bad = [dict(ok[0], kind="pbr")]
+    p2 = tmp_path / "bad.json"
+    p2.write_text(json.dumps(bad))
+    with pytest.raises(texlib.TexlibError, match="licens"):
+        texlib.load_manifest(p2)
+
+
+def test_font_roundtrip(cache):
+    data = b"fake-ttf-bytes"
+    man = _manifest_for(data, kind="font", asset_id="test_font", file="a.ttf")
+    texlib.fetch(["test_font"], downloader=lambda url: data, manifest=man)
+    res = texlib.resolve("test_font", manifest=man)
+    assert res["kind"] == "font"
+    assert res["file"].name == "a.ttf"
+    assert res["file"].read_bytes() == data
 
 
 # ---------- fetch ----------

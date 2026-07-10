@@ -61,6 +61,28 @@
     "tags": ["hdri", "studio", "neutral", "L1"]
   },
   {
+    "id": "font_cinzel",
+    "kind": "font",
+    "source": "Google Fonts via Fontsource/jsDelivr",
+    "url": "https://cdn.jsdelivr.net/fontsource/fonts/cinzel@5.2.8/latin-400-normal.ttf",
+    "sha256": "c79821b60794a591a6c52bee0d1b7e43910808bbce8c238635ba2ff061ce53a4",
+    "license": "OFL-1.1",
+    "credit": "Cinzel (Natanael Gama), SIL Open Font License 1.1",
+    "file": "cinzel-latin-400-normal.ttf",
+    "tags": ["font", "display", "roman", "inscription", "trajan", "greek"]
+  },
+  {
+    "id": "font_inter",
+    "kind": "font",
+    "source": "Google Fonts via Fontsource/jsDelivr",
+    "url": "https://cdn.jsdelivr.net/fontsource/fonts/inter@5.2.8/latin-400-normal.ttf",
+    "sha256": "d3641a4ba1f6c109b1ef87b3cd32262b4a10dec9e61274dd749bdd3f75437d91",
+    "license": "OFL-1.1",
+    "credit": "Inter (Rasmus Andersson), SIL Open Font License 1.1",
+    "file": "inter-latin-400-normal.ttf",
+    "tags": ["font", "ui", "sans", "clean"]
+  },
+  {
     "id": "hdri_kloofendal_partly_cloudy",
     "kind": "hdri",
     "source": "Poly Haven",
